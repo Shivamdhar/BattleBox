@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Admin Dashboard | Contest Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --card: #161b22;
+        --blue: #58a6ff;
+        --border: #30363d;
+        --text: #c9d1d9;
+        --green: #238636;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, sans-serif;
+        padding: 40px;
+        margin: 0;
+      }
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+
+      .controls {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        margin-bottom: 30px;
+        background: var(--card);
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+      }
+
+      .search-input {
+        padding: 10px 15px;
+        background: #010409;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: white;
+        flex-grow: 1;
+        outline: none;
+      }
+
+      /* View Toggle Switch */
+      .view-btn {
+        background: #21262d;
+        color: var(--text);
+        border: 1px solid var(--border);
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .view-btn.active {
+        background: var(--blue);
+        color: var(--bg);
+        border-color: var(--blue);
+      }
+
+      /* Table & Chart Containers */
+      #table-view,
+      #chart-view {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        padding: 20px;
+      }
+      #chart-view {
+        display: none;
+        height: 500px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        background: #21262d;
+        padding: 15px;
+        text-align: left;
+        color: var(--blue);
+        border-bottom: 1px solid var(--border);
+      }
+      td {
+        padding: 15px;
+        border-bottom: 1px solid var(--border);
+      }
+      tr:hover {
+        background: #1c2128;
+      }
+
+      .btn-refresh {
+        background: var(--green);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      .score-badge {
+        color: var(--green);
+        font-weight: bold;
+        font-family: monospace;
+        font-size: 1.1em;
+      }
+      .timestamp {
+        font-size: 12px;
+        color: #8b949e;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Admin Control Panel</h1>
+        <button class="btn-refresh" onclick="loadData()">Refresh Data</button>
+      </div>
+
+      <div
+        class="controls"
+        style="flex-direction: column; align-items: flex-start; gap: 20px"
+      >
+        <div style="display: flex; gap: 15px; width: 100%">
+          <div
+            style="
+              flex: 1;
+              border: 1px dashed var(--border);
+              padding: 15px;
+              border-radius: 8px;
+            "
+          >
+            <label
+              style="
+                display: block;
+                margin-bottom: 10px;
+                font-size: 12px;
+                color: var(--blue);
+              "
+              >UPLOAD QUESTIONS.JSON</label
+            >
+            <input
+              type="file"
+              id="qFile"
+              accept=".json"
+              onchange="handleUpload('questions.json', 'qFile')"
+            />
+          </div>
+          <div
+            style="
+              flex: 1;
+              border: 1px dashed var(--border);
+              padding: 15px;
+              border-radius: 8px;
+            "
+          >
+            <label
+              style="
+                display: block;
+                margin-bottom: 10px;
+                font-size: 12px;
+                color: var(--red);
+              "
+              >UPLOAD ANSWERS.JSON (SECRET)</label
+            >
+            <input
+              type="file"
+              id="aFile"
+              accept=".json"
+              onchange="handleUpload('answers.json', 'aFile')"
+            />
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px">
+          <button
+            class="btn-refresh"
+            onclick="refreshConfig()"
+            style="background: var(--blue)"
+          >
+            Manual Sync S3 to Memory
+          </button>
+          <span
+            id="config-status"
+            style="font-size: 13px; color: #8b949e; align-self: center"
+          ></span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div style="display: flex; gap: 5px">
+          <button
+            id="btn-table"
+            class="view-btn active"
+            onclick="switchView('table')"
+          >
+            Table View
+          </button>
+          <button id="btn-chart" class="view-btn" onclick="switchView('chart')">
+            Performance Graph
+          </button>
+        </div>
+        <input
+          type="text"
+          id="teamSearch"
+          class="search-input"
+          placeholder="Search team name..."
+          onkeyup="filterData()"
+        />
+      </div>
+
+      <div id="table-view">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40%">Team Name</th>
+              <th style="width: 20%">Score</th>
+              <th style="width: 40%">Submitted At</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <tr>
+              <td colspan="3" style="text-align: center; padding: 40px">
+                Fetching records...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="chart-view">
+        <canvas id="scoreChart"></canvas>
+      </div>
+    </div>
+
+    <script>
+      let allSubmissions = [];
+      let myChart = null;
+
+      async function loadData() {
+        try {
+          const res = await fetch("/api/admin/submissions");
+          allSubmissions = await res.json();
+          updateDisplay(allSubmissions);
+        } catch (e) {
+          document.getElementById("table-body").innerHTML =
+            '<tr><td colspan="3" style="text-align:center; color:red">Error loading API</td></tr>';
+        }
+      }
+
+      function switchView(view) {
+        document.getElementById("table-view").style.display =
+          view === "table" ? "block" : "none";
+        document.getElementById("chart-view").style.display =
+          view === "chart" ? "block" : "none";
+
+        document
+          .getElementById("btn-table")
+          .classList.toggle("active", view === "table");
+        document
+          .getElementById("btn-chart")
+          .classList.toggle("active", view === "chart");
+
+        if (view === "chart") renderChart(allSubmissions);
+      }
+
+      function updateDisplay(data) {
+        renderTable(data);
+        if (document.getElementById("chart-view").style.display === "block") {
+          renderChart(data);
+        }
+      }
+
+      function renderTable(data) {
+        const tbody = document.getElementById("table-body");
+        tbody.innerHTML = data.length
+          ? ""
+          : '<tr><td colspan="3" style="text-align:center;">No data found.</td></tr>';
+
+        data.forEach((sub) => {
+          const row = document.createElement("tr");
+          const date = new Date(sub.submittedAt);
+          row.innerHTML = `
+                    <td style="font-weight:bold; color:white;">${sub.teamName.toUpperCase()}</td>
+                    <td><span class="score-badge">${sub.score ?? 0}</span></td>
+                    <td><span class="timestamp">${date.toLocaleDateString()}</span> ${date.toLocaleTimeString()}</td>
+                `;
+          tbody.appendChild(row);
+        });
+      }
+
+      function renderChart(data) {
+        const ctx = document.getElementById("scoreChart").getContext("2d");
+
+        // Sort data by score descending for the graph
+        const sortedData = [...data].sort(
+          (a, b) => (b.score || 0) - (a.score || 0)
+        );
+        const labels = sortedData.map((s) => s.teamName.toUpperCase());
+        const scores = sortedData.map((s) => s.score || 0);
+
+        if (myChart) myChart.destroy();
+
+        myChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Team Scores",
+                data: scores,
+                backgroundColor: "#58a6ff",
+                borderColor: "#388bfd",
+                borderWidth: 1,
+                borderRadius: 5,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                grid: { color: "#30363d" },
+                ticks: { color: "#c9d1d9" },
+              },
+              x: { grid: { display: false }, ticks: { color: "#c9d1d9" } },
+            },
+            plugins: {
+              legend: { display: false },
+            },
+          },
+        });
+      }
+
+      function filterData() {
+        const term = document.getElementById("teamSearch").value.toUpperCase();
+        const filtered = allSubmissions.filter((s) =>
+          s.teamName.toUpperCase().includes(term)
+        );
+        updateDisplay(filtered);
+      }
+
+      loadData();
+      setInterval(loadData, 30000);
+
+      async function handleUpload(filename, inputId) {
+        const file = document.getElementById(inputId).files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const content = JSON.parse(e.target.result);
+            const statusEl = document.getElementById("config-status");
+            statusEl.innerText = `Uploading ${filename}...`;
+
+            const res = await fetch("/api/admin/upload-config", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ filename, content }),
+            });
+
+            const result = await res.json();
+            if (res.ok) {
+              alert(result.message);
+              statusEl.innerText = `Last update: ${new Date().toLocaleTimeString()}`;
+            } else {
+              throw new Error(result.error);
+            }
+          } catch (err) {
+            alert("Error: " + err.message);
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      async function refreshConfig() {
+        const res = await fetch("/api/admin/refresh-config", {
+          method: "POST",
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(
+            "Server memory updated! Loaded " + data.questions + " questions."
+          );
+        }
+      }
+    </script>
+  </body>
+</html>

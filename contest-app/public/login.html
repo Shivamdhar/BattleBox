@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Login</title>
+    <style>
+        body { background: #0d1117; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .login-card { background: #161b22; padding: 2rem; border-radius: 8px; border: 1px solid #30363d; width: 300px; }
+        input { width: 100%; padding: 10px; margin: 10px 0; background: #0d1117; border: 1px solid #30363d; color: white; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h3>Admin Login</h3>
+        <input type="text" id="user" placeholder="Username">
+        <input type="password" id="pass" placeholder="Password">
+        <button onclick="doLogin()">Login</button>
+    </div>
+
+    <script>
+    async function doLogin() {
+        const res = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: document.getElementById('user').value,
+                password: document.getElementById('pass').value
+            })
+        });
+        if (res.ok) window.location.reload();
+        else alert("Login Failed");
+    }
+    </script>
+</body>
+</html>

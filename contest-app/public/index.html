@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Contest Engine | Advanced Workspace</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root { --bg: #0d1117; --card: #161b22; --blue: #58a6ff; --green: #238636; --border: #30363d; --text: #c9d1d9; --red: #f85149; --sidebar: #010409; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; overflow: hidden; }
+        
+        #workspace { display: none; height: 100vh; flex-direction: column; }
+        #login-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .login-card { background: var(--card); border: 1px solid var(--border); padding: 40px; border-radius: 10px; width: 320px; text-align: center; }
+
+        .header { height: 60px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 25px; background: var(--card); z-index: 10; }
+        .main { display: flex; height: calc(100vh - 60px); }
+
+        .sidebar { width: 80px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding-top: 20px; }
+        .q-tab { 
+            width: 50px; height: 50px; margin-bottom: 15px; border-radius: 8px; 
+            display: flex; align-items: center; justify-content: center; 
+            cursor: pointer; background: var(--card); border: 1px solid var(--border);
+            font-weight: bold; transition: 0.2s; color: #8b949e;
+        }
+        .q-tab:hover { border-color: var(--blue); }
+        .q-tab.active { background: var(--blue); color: white; border-color: var(--blue); box-shadow: 0 0 10px rgba(88, 166, 255, 0.3); }
+
+        .content-area { flex: 1; display: flex; overflow: hidden; }
+        .pane-desc { width: 45%; padding: 30px; overflow-y: auto; border-right: 1px solid var(--border); background: var(--bg); }
+        .pane-input { width: 55%; padding: 30px; overflow-y: auto; background: #0d1117; }
+
+        .q-panel { display: none; height: 100%; width: 100%; }
+        .q-panel.active { display: flex; }
+
+        /* File Explorer UI */
+        .file-explorer { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 15px; background: #010409; }
+        .file-tabs { display: flex; background: #161b22; border-bottom: 1px solid var(--border); overflow-x: auto; }
+        .file-link { padding: 10px 15px; cursor: pointer; border-right: 1px solid var(--border); font-size: 13px; color: #8b949e; transition: 0.2s; white-space: nowrap; }
+        .file-link:hover { background: #1c2128; color: var(--text); }
+        .file-link.active { background: #0d1117; color: var(--blue); border-bottom: 2px solid var(--blue); }
+        .file-viewer { padding: 15px; height: 300px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 13px; color: #d1d5da; white-space: pre; line-height: 1.5; }
+
+        .mcq-option { display: block; padding: 15px; margin: 10px 0; background: var(--card); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .mcq-option:hover { border-color: var(--blue); background: #1c2128; }
+        textarea { width: 100%; height: 400px; background: #010409; color: var(--blue); border: 1px solid var(--border); border-radius: 8px; padding: 20px; font-family: 'Fira Code', monospace; resize: none; font-size: 14px; line-height: 1.6; }
+        
+        .btn { padding: 10px 20px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; }
+        .btn-green { background: var(--green); color: white; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 2000; }
+        .modal-card { background: var(--card); border: 1px solid var(--border); padding: 30px; border-radius: 12px; width: 500px; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div id="login-overlay">
+        <div class="login-card">
+            <h2 style="color: var(--blue)">Join Contest</h2>
+            <input type="text" id="teamName" placeholder="Enter Team Name" style="width:100%; padding:12px; margin-bottom:20px; background:#010409; border:1px solid var(--border); color:white; border-radius:6px;">
+            <p id="error-msg" style="color: var(--red); font-size: 13px;"></p>
+            <button class="btn btn-green" style="width: 100%;" onclick="login()">Start Session</button>
+        </div>
+    </div>
+
+    <div id="workspace">
+        <div class="header">
+            <div id="active-team" style="color: var(--blue); font-weight: bold;"></div>
+            <button class="btn btn-green" onclick="openPreview()">Finish & Submit</button>
+        </div>
+
+        <div class="main">
+            <div class="sidebar">
+                <div class="q-tab active" onclick="switchTab(1)" id="tab1">1</div>
+                <div class="q-tab" onclick="switchTab(2)" id="tab2">2</div>
+                <div class="q-tab" onclick="switchTab(3)" id="tab3">3</div>
+            </div>
+
+            <div class="content-area">
+                <div id="panel1" class="q-panel active">
+                    <div class="pane-desc">
+                        <h3>Problem 1</h3>
+                        <p><strong>Question:</strong> Which company developed the JavaScript language?</p>
+                    </div>
+                    <div class="pane-input">
+                        <h3>Your Answer</h3>
+                        <label class="mcq-option"><input type="radio" name="q1" value="Microsoft" onchange="saveDraft('q1', this.value)"> Microsoft</label>
+                        <label class="mcq-option"><input type="radio" name="q1" value="Netscape" onchange="saveDraft('q1', this.value)"> Netscape</label>
+                        <label class="mcq-option"><input type="radio" name="q1" value="Sun Microsystems" onchange="saveDraft('q1', this.value)"> Sun Microsystems</label>
+                        <label class="mcq-option"><input type="radio" name="q1" value="Google" onchange="saveDraft('q1', this.value)"> Google</label>
+                    </div>
+                </div>
+
+                <div id="panel2" class="q-panel">
+                    <div class="pane-desc">
+                        <h3>Problem 2</h3>
+                        <p><strong>Question:</strong> Explain the concept of "Closures" in JavaScript.</p>
+                    </div>
+                    <div class="pane-input">
+                        <h3>Code Editor</h3>
+                        <textarea id="q2" placeholder="Start typing here..." oninput="saveDraft('q2', this.value)"></textarea>
+                    </div>
+                </div>
+
+                <div id="panel3" class="q-panel">
+                    <div class="pane-desc">
+                        <h3>Problem 3: Project Analysis</h3>
+                        <p>Explore the files in the navigator below to understand the logic. Then, identify the primary flaw in the authentication flow.</p>
+                        
+                        <div class="file-explorer">
+                            <div class="file-tabs">
+                                <div class="file-link active" id="fl-s" onclick="openFile('server.js')">server.js</div>
+                                <div class="file-link" id="fl-a" onclick="openFile('auth.js')">auth.js</div>
+                                <div class="file-link" id="fl-c" onclick="openFile('config.js')">config.js</div>
+                            </div>
+                            <div class="file-viewer" id="fileContent">Select a file to view content</div>
+                        </div>
+                    </div>
+                    <div class="pane-input">
+                        <h3>Your Findings</h3>
+                        <textarea id="q3" placeholder="Describe the vulnerability found in these files..." oninput="saveDraft('q3', this.value)"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="preview-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h2>Review Answers</h2>
+            <div id="preview-content" style="text-align:left; background:#010409; padding:15px; border-radius:8px; max-height: 300px; overflow-y: auto;"></div>
+            <div style="margin-top:20px;">
+                <button class="btn" style="background:transparent; border:1px solid var(--border); color:white;" onclick="hideModal('preview-modal')">Edit</button>
+                <button class="btn btn-green" onclick="showModal('confirm-modal'); hideModal('preview-modal');">Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h3>Final Submit?</h3>
+            <p>You cannot change answers after this.</p>
+            <button class="btn" onclick="hideModal('confirm-modal')">Cancel</button>
+            <button class="btn btn-green" onclick="finalSubmit()">Confirm</button>
+        </div>
+    </div>
+
+    <div id="success-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h1 style="color: var(--green)">✓</h1>
+            <h2>Submitted!</h2>
+            <button class="btn btn-green" onclick="location.reload()">Finish</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let team = "";
+
+        const files = {
+            'server.js': `const express = require('express');\nconst auth = require('./auth');\nconst app = express();\n\napp.post('/api/login', (req, res) => {\n    const status = auth.verify(req.body.user, req.body.pass);\n    res.send(status);\n});`,
+            'auth.js': `const config = require('./config');\n\nexports.verify = (user, pass) => {\n    // DEBUG: Temporary bypass enabled for testing\n    if (user === 'admin' && config.DEBUG_MODE) return "Access Granted";\n    return "Access Denied";\n};`,
+            'config.js': `module.exports = {\n    PORT: 3000,\n    DEBUG_MODE: true,\n    VERSION: '1.0.4-beta'\n};`
+        };
+
+        function switchTab(qNum) {
+            document.querySelectorAll('.q-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab' + qNum).classList.add('active');
+            document.querySelectorAll('.q-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById('panel' + qNum).classList.add('active');
+            
+            if(qNum === 3) openFile('server.js');
+        }
+
+        function openFile(fileName) {
+            document.querySelectorAll('.file-link').forEach(l => l.classList.remove('active'));
+            // Match the UI tab
+            if(fileName === 'server.js') document.getElementById('fl-s').classList.add('active');
+            if(fileName === 'auth.js') document.getElementById('fl-a').classList.add('active');
+            if(fileName === 'config.js') document.getElementById('fl-c').classList.add('active');
+            
+            document.getElementById('fileContent').textContent = files[fileName];
+        }
+
+        async function login() {
+            const inputName = document.getElementById('teamName').value.trim();
+            if(!inputName) return;
+            const res = await fetch('/api/validate-team', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ teamName: inputName })
+            });
+            if(res.ok) {
+                team = inputName;
+                clearUI();
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('workspace').style.display = 'flex';
+                document.getElementById('active-team').innerText = "TEAM: " + team.toUpperCase();
+                socket.emit('join-contest', team);
+                loadDrafts();
+            } else {
+                const data = await res.json();
+                document.getElementById('error-msg').innerText = data.error;
+            }
+        }
+
+        function clearUI() {
+            document.querySelectorAll('input[type="radio"]').forEach(rb => rb.checked = false);
+            document.querySelectorAll('textarea').forEach(ta => ta.value = "");
+        }
+
+        function saveDraft(id, val) { localStorage.setItem(team + '_' + id, val); }
+
+        function loadDrafts() {
+            const q1Val = localStorage.getItem(team + '_q1');
+            if(q1Val) {
+                const rb = document.querySelector(`input[name="q1"][value="${q1Val}"]`);
+                if(rb) rb.checked = true;
+            }
+            document.getElementById('q2').value = localStorage.getItem(team + '_q2') || "";
+            document.getElementById('q3').value = localStorage.getItem(team + '_q3') || "";
+        }
+
+        function openPreview() {
+            const q1 = document.querySelector('input[name="q1"]:checked')?.value || "None";
+            const q2 = document.getElementById('q2').value || "None";
+            const q3 = document.getElementById('q3').value || "None";
+            
+            document.getElementById('preview-content').innerHTML = `
+                <p><b>Q1 (MCQ):</b> ${q1}</p>
+                <p><b>Q2 (Descriptive):</b> ${q2.substring(0,60)}...</p>
+                <p><b>Q3 (Analysis):</b> ${q3.substring(0,60)}...</p>
+            `;
+            showModal('preview-modal');
+        }
+
+        function showModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function hideModal(id) { document.getElementById(id).style.display = 'none'; }
+
+        async function finalSubmit() {
+            const answers = { 
+                q1: document.querySelector('input[name="q1"]:checked')?.value || "No Answer", 
+                q2: document.getElementById('q2').value,
+                q3: document.getElementById('q3').value 
+            };
+            const res = await fetch('/api/submit', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ teamName: team, answers })
+            });
+            if(res.ok) {
+                localStorage.removeItem(team + '_q1');
+                localStorage.removeItem(team + '_q2');
+                localStorage.removeItem(team + '_q3');
+                clearUI();
+                hideModal('confirm-modal');
+                showModal('success-modal');
+            }
+        }
+    </script>
+</body>
+</html>
