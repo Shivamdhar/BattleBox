@@ -3,8 +3,8 @@
     "@aws-sdk/client-s3": "^3.958.0",
     "express": "^5.2.1",
     "express-basic-auth": "^1.2.1",
-    "mongoose": "^9.0.2",
+    "express-session": "^1.18.2",
     "socket.io": "^4.8.1",
-    "express-session": "^1.18.2"
+    "sqlite3": "^5.1.7"
   }
 }
