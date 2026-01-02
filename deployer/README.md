@@ -9,7 +9,7 @@ region = us-east-1
 aws_access_key_id = <your_access_key>
 aws_secret_access_key = <your_secret_key>
 
-2. Invoke the following command to create the stack and needed resources
+2. Invoke the following command to create the stack and needed resources (Make sure to change the value for AdminUsername and AdminPassword)
 aws cloudformation create-stack \
   --stack-name ContestServerStack \
   --template-body file://contest-stack.yaml \
