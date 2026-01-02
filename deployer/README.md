@@ -14,7 +14,6 @@ aws cloudformation create-stack \
   --stack-name ContestServerStack \
   --template-body file://contest-stack.yaml \
   --parameters \
-    ParameterKey=KeyName,ParameterValue=ContestInstance \
     ParameterKey=AdminUsername,ParameterValue=admin \
     ParameterKey=AdminPassword,ParameterValue=secure-password-123 \
     ParameterKey=BucketName,ParameterValue=my-contest-data-2026 \

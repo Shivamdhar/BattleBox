@@ -1,14 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Contest Infrastructure: EC2, S3, SSM Parameters, 2GB Swap, and IAM Security'
+Description: 'Contest Infrastructure: Auto-KeyPair, EC2, S3, SSM Parameters, 2GB Swap, and IAM Security'
 
 Parameters:
-  KeyName:
-    Description: Name of an existing EC2 KeyPair for SSH access
-    Type: AWS::EC2::KeyPair::KeyName
   BucketName:
-    Description: Unique name for your S3 bucket
+    Description: Unique name for your S3 bucket (Must be globally unique)
     Type: String
-    Default: "my-contest-data-2026"
+    Default: "my-unique-contest-data-2026"
   AdminUsername:
     Type: String
     Default: "admin"
@@ -19,7 +16,24 @@ Parameters:
     Description: "Password for the contest admin dashboard"
 
 Resources:
-  # 1. SSM PARAMETER STORE (Free storage for credentials)
+  # 1. AUTOMATIC KEY PAIR (Stores private key in SSM Parameter Store)
+  ContestKeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Sub "${AWS::StackName}-key"
+
+  # 2. S3 BUCKET
+  ContestDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # 3. SSM PARAMETER STORE
   AdminUserParam:
     Type: AWS::SSM::Parameter
     Properties:
@@ -33,18 +47,8 @@ Resources:
       Name: /contest/admin_pass
       Type: String
       Value: !Ref AdminPassword
-  
-  ContestDataBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Ref BucketName
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
 
-  # 2. IAM ROLE (Allows EC2 to talk to S3 and SSM without keys)
+  # 4. IAM ROLE & PROFILE
   ContestInstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -66,7 +70,10 @@ Resources:
                   - 'ssm:GetParameters'
                 Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/contest/*'
               - Effect: Allow
-                Action: 's3:*'
+                Action: 
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:ListBucket'
                 Resource: 
                   - !Sub 'arn:aws:s3:::${BucketName}'
                   - !Sub 'arn:aws:s3:::${BucketName}/*'
@@ -76,7 +83,7 @@ Resources:
     Properties:
       Roles: [!Ref ContestInstanceRole]
 
-  # 3. SECURITY GROUP (SSH and Web Traffic)
+  # 5. SECURITY GROUP
   ContestSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -91,13 +98,13 @@ Resources:
           ToPort: 22
           CidrIp: 0.0.0.0/0
 
-  # 4. EC2 INSTANCE (The Server)
+  # 6. EC2 INSTANCE
   ContestServer:
     Type: AWS::EC2::Instance
     Properties:
       InstanceType: t3.micro
       ImageId: ami-0c7217cdde317cfec # Ubuntu 22.04 LTS (Verify ID for your region)
-      KeyName: !Ref KeyName
+      KeyName: !Ref ContestKeyPair
       IamInstanceProfile: !Ref ContestInstanceProfile
       SecurityGroupIds: [!Ref ContestSecurityGroup]
       BlockDeviceMappings:
@@ -113,13 +120,10 @@ Resources:
           apt-get install -y docker.io git curl unzip
 
           # 2. VALID AWS CLI v2 INSTALLATION
-          # We download the zip, unzip, and use sudo to install to the standard path
           cd /tmp
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
           unzip -q awscliv2.zip
           sudo ./aws/install --update
-          
-          # Cleanup to save space
           rm -rf awscliv2.zip aws
 
           # 3. Docker setup
@@ -140,6 +144,9 @@ Outputs:
   ServerIP:
     Description: Public IP of your Contest Server
     Value: !GetAtt ContestServer.PublicIp
-  S3Bucket:
-    Description: The bucket you created
-    Value: !Ref BucketName
+  S3BucketName:
+    Description: The actual bucket created
+    Value: !Ref ContestDataBucket
+  KeyPairName:
+    Description: Name of the generated KeyPair
+    Value: !Ref ContestKeyPair
