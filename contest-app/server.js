@@ -92,11 +92,6 @@ async function bootstrap() {
             contestAnswers = JSON.parse(await aData.Body.transformToString());
             console.log("✅ Contest content loaded from S3");
 
-            // 3. Start Server ONLY after everything is ready
-            server.listen(PORT, '0.0.0.0', () => {
-                console.log(`🚀 Server fully initialized and running on port ${PORT}`);
-            });
-
         } catch (err) {
             console.error("❌ Bootstrap Failed:", err.message);
             process.exit(1); // Stop if we can't get credentials
@@ -215,4 +210,8 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => activeTeams.delete(socket.id));
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 SQLite Server running on port ${PORT}`));
+
+// Final Start Server ONLY after everything is ready
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server fully initialized and running on port ${PORT}`);
+});
