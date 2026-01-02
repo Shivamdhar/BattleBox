@@ -1,0 +1,17 @@
+{
+  "q1": {
+    "type": "mcq",
+    "ans": "Netscape",
+    "score": 10
+  },
+  "q2": {
+    "type": "descriptive",
+     "keywords": ["scope", "function", "lexical"], 
+    "score": 20
+  },
+  "q3": {
+    "type": "file-analysis",
+    "keywords": ["DEBUG", "true", "config.js", "process.env"],
+    "score": 40
+  }
+}

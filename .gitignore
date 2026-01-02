@@ -1,0 +1,7 @@
+contest-app/node_modules
+contest-app/npm-debug.log
+contest-app/package-lock.json
+.git
+.env
+contest-app/data
+contest.db

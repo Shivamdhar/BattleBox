@@ -274,21 +274,17 @@
 
       // --- AUTH LOGIC ---
       async function logout() {
-        if (!confirm("Are you sure you want to logout?")) return;
-        const res = await fetch("/api/admin/logout", { method: "POST" });
-        // 1. Destroy the session in the store (SQLite/Memory)
-        req.session.destroy((err) => {
-          if (err) {
-            console.error("Logout Error:", err);
-            return res.status(500).json({ error: "Could not log out" });
+        try {
+          // 1. Tell the server to kill the session
+          const response = await fetch("/api/admin/logout", { method: "POST" });
+
+          if (response.ok) {
+            // 2. ONLY redirect after the server confirms it's done
+            window.location.href = "/admin";
           }
-
-          // 2. Clear the cookie by name (default is 'connect.sid')
-          res.clearCookie("connect.sid");
-
-          // 3. Send success response
-          res.json({ success: true });
-        });
+        } catch (err) {
+          console.error("Logout failed", err);
+        }
       }
 
       // --- DATA LOADING ---

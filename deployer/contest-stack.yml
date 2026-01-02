@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Contest Infrastructure: EC2, S3, SSM Parameters, 2GB Swap, and IAM Security'
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair for SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+  BucketName:
+    Description: Unique name for your S3 bucket
+    Type: String
+    Default: "my-contest-data-2026"
+  AdminUsername:
+    Type: String
+    Default: "admin"
+    Description: "Username for the contest admin dashboard"
+  AdminPassword:
+    Type: String
+    NoEcho: true
+    Description: "Password for the contest admin dashboard"
+
+Resources:
+  # 1. SSM PARAMETER STORE (Free storage for credentials)
+  AdminUserParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /contest/admin_user
+      Type: String
+      Value: !Ref AdminUsername
+
+  AdminPassParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /contest/admin_pass
+      Type: String
+      Value: !Ref AdminPassword
+
+  # 2. IAM ROLE (Allows EC2 to talk to S3 and SSM without keys)
+  ContestInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ec2.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: ContestAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 'ssm:GetParameter'
+                  - 'ssm:GetParameters'
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/contest/*'
+              - Effect: Allow
+                Action: 's3:*'
+                Resource: 
+                  - !Sub 'arn:aws:s3:::${BucketName}'
+                  - !Sub 'arn:aws:s3:::${BucketName}/*'
+
+  ContestInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref ContestInstanceRole]
+
+  # 3. SECURITY GROUP (SSH and Web Traffic)
+  ContestSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP (80) and SSH (22)
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  # 4. EC2 INSTANCE (The Server)
+  ContestServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      ImageId: ami-0c7217cdde317cfec # Ubuntu 22.04 LTS (Verify ID for your region)
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref ContestInstanceProfile
+      SecurityGroupIds: [!Ref ContestSecurityGroup]
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Basic setup
+          apt-get update -y
+          apt-get install -y docker.io git curl
+          systemctl start docker
+          systemctl enable docker
+          usermod -aG docker ubuntu
+
+          # Create 2GB SWAP (Crucial for Docker Build on 1GB RAM)
+          # Using dd to ensure the file has no 'holes' for swap stability
+          dd if=/dev/zero of=/swapfile bs=1M count=2048
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+          # Create persistence directory for SQLite
+          mkdir -p /home/ubuntu/app/data
+          chown -R ubuntu:ubuntu /home/ubuntu/app
+
+Outputs:
+  ServerIP:
+    Description: Public IP of your Contest Server
+    Value: !GetAtt ContestServer.PublicIp
+  S3Bucket:
+    Description: The bucket you created
+    Value: !Ref BucketName

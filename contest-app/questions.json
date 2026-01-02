@@ -1,0 +1,27 @@
+[
+  {
+    "id": "q1",
+    "type": "mcq",
+    "description": "Which company developed the JavaScript language?",
+    "options": [
+      "Microsoft",
+      "Netscape",
+      "Sun Microsystems",
+      "Google"
+    ]
+  },
+  {
+    "id": "q2",
+    "type": "descriptive",
+    "description": " Explain the concept of \"Closures\" in JavaScript."
+  },
+  {
+    "id": "q3",
+    "type": "file-analysis",
+    "description": "The following project has a security vulnerability. Examine the files and identify which specific environment setting is exposing sensitive data.",
+    "files": {
+      "server.js": "const express = require('express');\nconst config = require('./config');\nconst app = express();\n\napp.get('/status', (req, res) => {\n  if (config.DEBUG) {\n    res.json({ env: process.env, config: config });\n  } else {\n    res.send('Server OK');\n  }\n});",
+      "config.js": "module.exports = {\n  PORT: 3000,\n  DEBUG: true,\n  DB_NAME: 'contest_db'\n};"
+    }
+  }
+]

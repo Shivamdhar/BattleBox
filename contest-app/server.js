@@ -1,10 +1,24 @@
+require('dotenv').config();
+const fsSync = require('fs');
+if (!fsSync.existsSync('./data')) fsSync.mkdirSync('./data');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const session = require('express-session');
+const fs = require('fs').promises;
 const path = require('path');
-const sqlite3 = require('sqlite3').verbose(); // Use SQLite instead of Mongoose
-const { S3Client, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
+const sqlite3 = require('sqlite3').verbose();
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm"); // New
+// Check if we are running in production (AWS)
+const isProduction = process.env.NODE_ENV === 'production';
+// These will now pull from .env locally or the OS/SSM on AWS
+const ADMIN_CREDENTIALS = {
+    user: process.env.ADMIN_USER || "admin",
+    pass: process.env.ADMIN_PASS || "password123"
+};
+let contestQuestions = [];
+let contestAnswers = {};
 
 const app = express();
 const server = http.createServer(app);
@@ -15,17 +29,14 @@ const io = new Server(server, {
 });
 
 const PORT = 3000;
-const BUCKET_NAME = "contes-app-s3-bucket";
-const ADMIN_CREDENTIALS = { user: "admin", pass: "password123" };
+const BUCKET_NAME = "my-contest-data-2026"; // Match your CloudFormation param
 
-// --- DATABASE INITIALIZATION (SQLite) ---
-// This creates a file named 'contest.db' in your project root
+// --- DATABASE INITIALIZATION ---
 const db = new sqlite3.Database('./data/contest.db', (err) => {
-    if (err) console.error("❌ SQLite Connection Error:", err.message);
-    else console.log("✅ Connected to SQLite Database");
+    if (err) console.error("❌ SQLite Error:", err.message);
+    else console.log("✅ Connected to SQLite");
 });
 
-// Create the submissions table if it doesn't exist
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS submissions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,10 +47,9 @@ db.serialize(() => {
     )`);
 });
 
-// --- S3 CLIENT & CACHE ---
+// --- CLIENTS ---
 const s3Client = new S3Client({ region: "us-east-1" });
-let contestQuestions = [];
-let contestAnswers = {}; 
+const ssmClient = new SSMClient({ region: "us-east-1" }); // New
 const activeTeams = new Map();
 
 // --- MIDDLEWARE ---
@@ -52,17 +62,64 @@ app.use(session({
     cookie: { secure: false, maxAge: 3600000 }
 }));
 
-// --- INITIALIZATION ---
-async function loadContestConfig() {
-    try {
-        const qData = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: "questions.json" }));
-        const aData = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: "answers.json" }));
-        contestQuestions = JSON.parse(await qData.Body.transformToString());
-        contestAnswers = JSON.parse(await aData.Body.transformToString());
-        console.log("✅ Questions Loaded from S3");
-    } catch (err) { console.error("❌ S3 Load Error:", err.message); }
+// --- BOOTSTRAP LOGIC (SSM + S3) ---
+async function bootstrap() {
+
+
+    if (isProduction) {
+        // --- CLOUD MODE (AWS SSM & S3) ---
+        try {
+            console.log("⏳ Loading configuration from AWS...");
+
+            // 1. Fetch Credentials from SSM
+            const userCmd = new GetParameterCommand({ Name: "/contest/admin_user" });
+            const passCmd = new GetParameterCommand({ Name: "/contest/admin_pass" });
+
+            const [userRes, passRes] = await Promise.all([
+                ssmClient.send(userCmd),
+                ssmClient.send(passCmd)
+            ]);
+
+            ADMIN_CREDENTIALS.user = userRes.Parameter.Value;
+            ADMIN_CREDENTIALS.pass = passRes.Parameter.Value;
+            console.log("✅ Admin credentials loaded from SSM");
+
+            // 2. Fetch Questions/Answers from S3
+            const qData = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: "questions.json" }));
+            const aData = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: "answers.json" }));
+
+            contestQuestions = JSON.parse(await qData.Body.transformToString());
+            contestAnswers = JSON.parse(await aData.Body.transformToString());
+            console.log("✅ Contest content loaded from S3");
+
+            // 3. Start Server ONLY after everything is ready
+            server.listen(PORT, '0.0.0.0', () => {
+                console.log(`🚀 Server fully initialized and running on port ${PORT}`);
+            });
+
+        } catch (err) {
+            console.error("❌ Bootstrap Failed:", err.message);
+            process.exit(1); // Stop if we can't get credentials
+        }
+    } else {
+        // --- LOCAL MODE (Hardcoded + Local Files) ---
+        try {
+            // Read from local files in your project root
+            const qFile = await fs.readFile('./questions.json', 'utf8');
+            const aFile = await fs.readFile('./answers.json', 'utf8');
+
+            contestQuestions = JSON.parse(qFile);
+            contestAnswers = JSON.parse(aFile);
+
+            console.log("💻 Local Mode: Using hardcoded admin and local JSON files");
+        } catch (err) {
+            console.error("❌ Local Load Failed (Check if questions.json exists):", err.message);
+        }
+    }
 }
-loadContestConfig();
+
+// Start the process
+bootstrap();
 
 // --- API ROUTES ---
 
@@ -112,7 +169,7 @@ app.post('/api/submit', (req, res) => {
 // --- ADMIN ROUTES ---
 app.get('/api/admin/submissions', (req, res) => {
     if (!req.session.adminLoggedIn) return res.status(401).json({ error: "Unauthorized" });
-    
+
     db.all("SELECT * FROM submissions ORDER BY score DESC", [], (err, rows) => {
         res.json(rows.map(r => ({ ...r, answers: JSON.parse(r.answers) })));
     });
@@ -123,6 +180,22 @@ app.post('/api/admin/login', (req, res) => {
         req.session.adminLoggedIn = true;
         res.json({ success: true });
     } else res.status(401).json({ error: "Invalid login" });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+    // 1. Destroy the session in the store (SQLite/Memory)
+    req.session.destroy((err) => {
+        if (err) {
+            console.error("Logout Error:", err);
+            return res.status(500).json({ error: "Could not log out" });
+        }
+
+        // 2. Clear the cookie by name (default is 'connect.sid')
+        res.clearCookie('connect.sid');
+
+        // 3. Send success response
+        res.json({ success: true });
+    });
 });
 
 app.get('/admin', (req, res) => {
