@@ -33,6 +33,16 @@ Resources:
       Name: /contest/admin_pass
       Type: String
       Value: !Ref AdminPassword
+  
+  ContestDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
   # 2. IAM ROLE (Allows EC2 to talk to S3 and SSM without keys)
   ContestInstanceRole:
@@ -98,22 +108,31 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          # Basic setup
+          # 1. Basic setup
           apt-get update -y
-          apt-get install -y docker.io git curl
+          apt-get install -y docker.io git curl unzip
+
+          # 2. VALID AWS CLI v2 INSTALLATION
+          # We download the zip, unzip, and use sudo to install to the standard path
+          cd /tmp
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          sudo ./aws/install --update
+          
+          # Cleanup to save space
+          rm -rf awscliv2.zip aws
+
+          # 3. Docker setup
           systemctl start docker
           systemctl enable docker
           usermod -aG docker ubuntu
 
-          # Create 2GB SWAP (Crucial for Docker Build on 1GB RAM)
-          # Using dd to ensure the file has no 'holes' for swap stability
+          # 4. Swap and Persistence
           dd if=/dev/zero of=/swapfile bs=1M count=2048
           chmod 600 /swapfile
           mkswap /swapfile
           swapon /swapfile
           echo '/swapfile none swap sw 0 0' >> /etc/fstab
-
-          # Create persistence directory for SQLite
           mkdir -p /home/ubuntu/app/data
           chown -R ubuntu:ubuntu /home/ubuntu/app
 
