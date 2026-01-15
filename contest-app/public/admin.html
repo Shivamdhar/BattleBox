@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <title>Admin Dashboard | Contest Monitor</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
       :root {
         --bg: #0d1117;
@@ -149,6 +150,35 @@
         <div class="header-actions">
           <button class="btn-refresh" onclick="loadData()">Refresh Data</button>
           <button class="btn-logout" onclick="logout()">Logout</button>
+        </div>
+      </div>
+      <div class="header" style="margin-top: 30px">
+        <h3>Live Server Health</h3>
+      </div>
+      <div
+        class="controls"
+        id="status-panel"
+        style="
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          text-align: center;
+        "
+      >
+        <div>
+          <div style="font-size: 12px; color: var(--blue)">ACTIVE SESSIONS</div>
+          <div id="stat-active" style="font-size: 24px; font-weight: bold">
+            0
+          </div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: var(--green)">TOTAL REQUESTS</div>
+          <div id="stat-reqs" style="font-size: 24px; font-weight: bold">0</div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: var(--red)">THROTTLED IPS</div>
+          <div id="stat-blocked" style="font-size: 24px; font-weight: bold">
+            -
+          </div>
         </div>
       </div>
 
@@ -373,30 +403,120 @@
 
       function renderChart(data) {
         const ctx = document.getElementById("scoreChart").getContext("2d");
-        const sortedData = [...data].sort(
-          (a, b) => (b.score || 0) - (a.score || 0)
-        );
         if (myChart) myChart.destroy();
+
+        // 1. Group data by Team Name
+        const teams = {};
+        const allTimestamps = new Set();
+
+        data.forEach((sub) => {
+          const team = sub.teamName.toUpperCase();
+          if (!teams[team]) teams[team] = [];
+
+          const timestamp = new Date(sub.submittedAt).getTime();
+          teams[team].push({ x: timestamp, y: sub.score || 0 });
+          allTimestamps.add(timestamp);
+        });
+
+        // 2. Sort timestamps for the X-axis labels
+        const sortedLabels = Array.from(allTimestamps).sort((a, b) => a - b);
+
+        // 3. Create a dataset for each team
+        const colors = [
+          "#58a6ff",
+          "#238636",
+          "#f85149",
+          "#d29922",
+          "#bc8cff",
+          "#fa7a18",
+        ];
+        const datasets = Object.keys(teams).map((teamName, index) => {
+          return {
+            label: teamName,
+            data: teams[teamName].sort((a, b) => a.x - b.x), // Ensure points are in time order
+            borderColor: colors[index % colors.length],
+            backgroundColor: colors[index % colors.length] + "33", // Add transparency
+            tension: 0.3, // Makes the line curved
+            fill: false,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+          };
+        });
+
+        // 4. Initialize Chart.js Line Chart
         myChart = new Chart(ctx, {
-          type: "bar",
-          data: {
-            labels: sortedData.map((s) => s.teamName.toUpperCase()),
-            datasets: [
-              {
-                label: "Score",
-                data: sortedData.map((s) => s.score || 0),
-                backgroundColor: "#58a6ff",
-              },
-            ],
-          },
+          type: "line",
+          data: { datasets },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: { y: { beginAtZero: true } },
+            interaction: {
+              mode: "index",
+              intersect: false,
+            },
+            plugins: {
+              legend: {
+                display: true,
+                position: "top",
+                labels: { color: "#c9d1d9" },
+              },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    return `${context.dataset.label}: ${context.parsed.y} points`;
+                  },
+                  title: function (context) {
+                    return new Date(context[0].parsed.x).toLocaleString();
+                  },
+                },
+              },
+            },
+            scales: {
+              x: {
+                type: "linear", // Use linear to handle Unix timestamps
+                position: "bottom",
+                grid: { color: "#30363d" },
+                ticks: {
+                  color: "#8b949e",
+                  callback: function (value) {
+                    return new Date(value).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    });
+                  },
+                },
+              },
+              y: {
+                beginAtZero: true,
+                grid: { color: "#30363d" },
+                ticks: { color: "#8b949e" },
+              },
+            },
           },
         });
       }
 
+      async function updateStats() {
+        try {
+          // You'll need an endpoint in your Node app that fetches from http://nginx-shield/nginx_status
+          const res = await fetch("/api/admin/server-stats");
+          const text = await res.text();
+
+          // Nginx stub_status parsing
+          const activeMatch = text.match(/Active connections: (\d+)/);
+          const reqsMatch = text.match(/\s+(\d+)\s+(\d+)\s+(\d+)/);
+
+          if (activeMatch)
+            document.getElementById("stat-active").innerText = activeMatch[1];
+          if (reqsMatch)
+            document.getElementById("stat-reqs").innerText = reqsMatch[3];
+        } catch (e) {
+          console.log("Stats update failed. Ensure proxy is configured.");
+        }
+      }
+
+      // Call this inside your existing loadData or setInterval
+      setInterval(updateStats, 5000);
       function filterData() {
         const term = document.getElementById("teamSearch").value.toUpperCase();
         const filtered = allSubmissions.filter((s) =>
@@ -406,7 +526,7 @@
       }
 
       loadData();
-      setInterval(loadData, 30000);
+      setInterval(loadData, 90000);
     </script>
   </body>
 </html>

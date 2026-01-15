@@ -10,16 +10,9 @@ BUCKET_NAME="my-contest-data-2026"
 
 echo "🚀 Starting Deployment..."
 
-# 2. Clean and Clone
-if [ -d "$APP_ROOT/temp_repo" ]; then sudo rm -rf $APP_ROOT/temp_repo; fi
-mkdir -p $APP_ROOT/data
-
-echo "📂 Cloning repository and switching to $BRANCH_NAME..."
-git clone -b $BRANCH_NAME $REPO_URL $APP_ROOT/temp_repo
-
 # 3. UPLOAD JSON FILES TO S3
 echo "📤 Preparing S3 Upload..."
-cd $APP_ROOT/temp_repo/$SUB_FOLDER || { echo "❌ Error: Folder $SUB_FOLDER not found"; exit 1; }
+cd $APP_ROOT/$SUB_FOLDER || { echo "❌ Error: Folder $SUB_FOLDER not found"; exit 1; }
 
 if [ -f "questions.json" ] && [ -f "answers.json" ]; then
     echo "🚀 Uploading to s3://$BUCKET_NAME..."
@@ -29,11 +22,6 @@ if [ -f "questions.json" ] && [ -f "answers.json" ]; then
 else
     echo "⚠️ Warning: JSON files not found. Skipping S3 upload."
 fi
-
-# 4. Move code and Cleanup
-echo "📦 Finalizing file structure..."
-cp -r $APP_ROOT/temp_repo/$SUB_FOLDER $APP_ROOT/
-sudo rm -rf $APP_ROOT/temp_repo
 
 # Fix permissions for Docker socket immediately
 sudo chmod 666 /var/run/docker.sock

@@ -198,6 +198,17 @@ app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
+// Stats
+app.get('/api/admin/server-stats', async (req, res) => {
+  try {
+    const response = await fetch('http://nginx-shield/nginx_status');
+    const data = await response.text();
+    res.send(data);
+  } catch (err) {
+    res.status(500).send("Error fetching Nginx stats");
+  }
+});
+
 // --- SOCKET LOGIC ---
 io.on('connection', (socket) => {
     socket.on('join-contest', (teamName) => {
