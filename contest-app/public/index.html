@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -24,9 +24,13 @@
       }
 
       @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        0% {
+          transform: rotate(0deg);
         }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
 
       #workspace {
         display: none;
@@ -299,7 +303,10 @@
           </button>
           <button
             class="btn btn-green"
-            onclick="showModal('confirm-modal'); hideModal('preview-modal');"
+            onclick="
+              showModal('confirm-modal');
+              hideModal('preview-modal');
+            "
           >
             Submit
           </button>
@@ -326,7 +333,7 @@
     </div>
 
     <script>
-      let socket; // Don't initialize yet
+      let socket;
       let team = "";
       let questions = [];
 
@@ -339,27 +346,18 @@
           const tabsContainer = document.getElementById("dynamic-tabs");
           const panelsContainer = document.getElementById("dynamic-panels");
 
-          // IF NO QUESTIONS EXIST: Show the Standby Dialogue
           if (questions.length === 0) {
             tabsContainer.innerHTML = "";
             panelsContainer.innerHTML = `
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 80vh; text-align: center; color: #8b949e;">
                     <div style="font-size: 64px; margin-bottom: 20px;">⏳</div>
                     <h2 style="color: var(--blue);">Waiting for Launch</h2>
-                    <p style="max-width: 400px; line-height: 1.6;">
-                        The contest administrator hasn't uploaded the questions yet.<br> 
-                        Please stay on this page; the workspace will refresh automatically once the contest begins.
-                    </p>
-                    <div class="loader" style="margin-top: 20px; border: 3px solid #30363d; border-top: 3px solid var(--blue); border-radius: 50%; width: 30px; height: 30px; animation: spin 2s linear infinite;"></div>
-                </div>
-            `;
-
-            // Poll every 10 seconds to see if questions are added
+                    <p style="max-width: 400px; line-height: 1.6;">The administrator is preparing the environment.</p>
+                </div>`;
             setTimeout(initContest, 10000);
             return;
           }
 
-          // IF QUESTIONS EXIST: Build the UI as normal
           tabsContainer.innerHTML = "";
           panelsContainer.innerHTML = "";
 
@@ -376,57 +374,101 @@
             panel.id = `panel${qNum}`;
             panel.className = `q-panel ${i === 0 ? "active" : ""}`;
 
-            let inputHtml =
-              q.type === "mcq"
-                ? q.options
+            // --- GENERATE INPUT HTML BASED ON TYPE ---
+            let inputHtml = "";
+
+            if (q.type === "file-analysis" && q.subQuestions) {
+              inputHtml =
+                `
+        <div class="task-header" style="margin-bottom: 15px; padding: 10px; border-bottom: 1px solid var(--border);">
+            <span style="color: var(--blue); font-weight: bold; font-size: 0.9em;">📋 COMPLETE THE FOLLOWING TASKS:</span>
+        </div>
+        ` +
+                q.subQuestions
+                  .map(
+                    (sq, idx) => `
+        <div class="sub-q-block" style="margin-bottom: 20px; padding: 20px; background: #0d1117; border-radius: 8px; border: 1px solid var(--border);">
+            <label style="display:block; margin-bottom: 12px; font-weight: 600; font-size: 0.95em;">
+                <span style="color: var(--blue); margin-right: 8px;">Task ${idx + 1}:</span> ${sq.text}
+            </label>
+            ${
+              sq.type === "mcq"
+                ? sq.options
                     .map(
-                      (opt) =>
-                        `<label class="mcq-option"><input type="radio" name="${q.id}" value="${opt}" onchange="saveDraft('${q.id}', this.value)"> ${opt}</label>`
+                      (opt) => `
+                    <label class="mcq-option" style="background: #161b22; border: 1px solid #30363d; padding: 10px; margin-bottom: 8px; border-radius: 6px; display: block; cursor: pointer;">
+                        <input type="radio" name="${q.id}_${sq.id}" value="${opt}" onchange="saveDraft('${q.id}_${sq.id}', this.value)"> 
+                        <span style="margin-left: 10px;">${opt}</span>
+                    </label>
+                `,
                     )
                     .join("")
-                : `<textarea id="${q.id}" placeholder="Type your answer..." oninput="saveDraft('${q.id}', this.value)"></textarea>`;
+                : `<textarea id="${q.id}_${sq.id}" 
+                    style="width: 100%; height: 80px; background: #010409; border: 1px solid var(--border); color: white; padding: 12px; border-radius: 6px; font-family: monospace;"
+                    placeholder="Enter your technical analysis..." 
+                    oninput="saveDraft('${q.id}_${sq.id}', this.value)"></textarea>`
+            }
+        </div>
+    `,
+                  )
+                  .join("");
+            } else if (q.type === "mcq") {
+              // EXISTING: Standard MCQ
+              inputHtml = q.options
+                .map(
+                  (opt) =>
+                    `<label class="mcq-option"><input type="radio" name="${q.id}" value="${opt}" onchange="saveDraft('${q.id}', this.value)"> ${opt}</label>`,
+                )
+                .join("");
+            } else {
+              // EXISTING: Standard Text
+              inputHtml = `<textarea id="${q.id}" placeholder="Type your answer..." oninput="saveDraft('${q.id}', this.value)"></textarea>`;
+            }
 
             panel.innerHTML = `
-                <div class="pane-desc">
-                    <h3>Problem ${qNum}</h3>
-                    <p>${q.description}</p>
-                    ${
-                      q.type === "file-analysis"
-                        ? renderFileExplorerHtml(q)
-                        : ""
-                    }
-                </div>
-                <div class="pane-input"><h3>Your Response</h3>${inputHtml}</div>
-            `;
+    <div class="pane-desc">
+        <div style="background: rgba(88, 166, 255, 0.1); padding: 15px; border-radius: 8px; border-left: 4px solid var(--blue); margin-bottom: 20px;">
+            <h3 style="margin-top:0;">${q.title || "Analysis Task"}</h3>
+            <p style="margin-bottom:0; color: #8b949e; line-height: 1.5;">${q.description}</p>
+        </div>
+        ${q.type === "file-analysis" ? renderFileExplorerHtml(q) : ""}
+    </div>
+    <div class="pane-input">
+        <div class="response-card" style="background: var(--card); border: 1px solid var(--border); padding: 20px; border-radius: 12px; height: 100%; overflow-y: auto;">
+            ${inputHtml}
+        </div>
+    </div>
+`;
             panelsContainer.appendChild(panel);
           });
           loadDrafts();
         } catch (e) {
-          console.error("Connection lost:", e);
+          console.error("Sync error:", e);
         }
       }
-      // 2. FILE EXPLORER HELPER
+
+      // 2. HELPER FUNCTIONS
       function renderFileExplorerHtml(q) {
+        if (!q.files) return "";
         const fileNames = Object.keys(q.files);
         const tabHtml = fileNames
           .map(
             (name, i) => `
-                <div class="file-link ${i === 0 ? "active" : ""}" 
-                     onclick="openFile('${
-                       q.id
-                     }', '${name}', this)">${name}</div>
-            `
+        <div class="file-link ${i === 0 ? "active" : ""}" 
+             style="display: flex; align-items: center; gap: 8px; padding: 8px 15px; font-size: 13px; border-right: 1px solid var(--bg);"
+             onclick="openFile('${q.id}', '${name}', this)">
+            <span style="color: #e3b341;">JS</span> ${name}
+        </div>
+    `,
           )
           .join("");
 
         return `
-                <div class="file-explorer" id="explorer-${q.id}">
-                    <div class="file-tabs">${tabHtml}</div>
-                    <div class="file-viewer" id="viewer-${q.id}">${
-          q.files[fileNames[0]]
-        }</div>
-                </div>
-            `;
+        <div class="file-explorer" style="border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #010409;">
+            <div class="file-tabs" style="background: #161b22; display: flex; border-bottom: 1px solid var(--border);">${tabHtml}</div>
+            <pre class="file-viewer" id="viewer-${q.id}" 
+                 style="margin: 0; padding: 20px; color: #d1d5db; font-family: 'Fira Code', monospace; font-size: 14px; line-height: 1.6; overflow-x: auto; min-height: 200px;">${q.files[fileNames[0]]}</pre>
+        </div>`;
       }
 
       function openFile(qId, fileName, el) {
@@ -435,13 +477,11 @@
           .querySelectorAll(".file-link")
           .forEach((l) => l.classList.remove("active"));
         el.classList.add("active");
-
         const questionData = questions.find((q) => q.id === qId);
         document.getElementById(`viewer-${qId}`).textContent =
           questionData.files[fileName];
       }
 
-      // 3. CORE LOGIC
       function switchTab(qNum) {
         document
           .querySelectorAll(".q-tab")
@@ -453,90 +493,67 @@
         document.getElementById("panel" + qNum).classList.add("active");
       }
 
-      async function login() {
-        const inputName = document.getElementById("teamName").value.trim();
-        if (!inputName) return;
-
-        const res = await fetch("/api/validate-team", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ teamName: inputName }),
-        });
-
-        if (res.ok) {
-          team = inputName;
-
-          // Initialize Socket AFTER successful login
-          socket = io({
-            transports: ["polling", "websocket"], // Fallback for various EC2 setups
-            upgrade: true,
-            reconnectionAttempts: 5,
-          });
-
-          socket.on("connect", () => {
-            console.log("Connected to Server via Socket");
-            socket.emit("join-contest", team);
-          });
-
-          socket.on("connect_error", (err) => {
-            console.error("❌ Socket Connection Error:", err.message);
-          });
-
-          document.getElementById("login-overlay").style.display = "none";
-          document.getElementById("workspace").style.display = "flex";
-          document.getElementById("active-team").innerText =
-            "TEAM: " + team.toUpperCase();
-
-          initContest();
-        } else {
-          const data = await res.json();
-          document.getElementById("error-msg").innerText = data.error;
-        }
-      }
-
+      // 3. STORAGE & SUBMISSION (Handles Sub-Questions)
       function saveDraft(id, val) {
         if (team) localStorage.setItem(team + "_" + id, val);
       }
 
       function loadDrafts() {
         questions.forEach((q) => {
-          const val = localStorage.getItem(team + "_" + q.id);
-          if (!val) return;
-          if (q.type === "mcq") {
-            const rb = document.querySelector(
-              `input[name="${q.id}"][value="${val}"]`
-            );
-            if (rb) rb.checked = true;
+          if (q.type === "file-analysis" && q.subQuestions) {
+            q.subQuestions.forEach((sq) => {
+              const storageId = `${q.id}_${sq.id}`;
+              const val = localStorage.getItem(team + "_" + storageId);
+              if (!val) return;
+              if (sq.type === "mcq") {
+                const rb = document.querySelector(
+                  `input[name="${storageId}"][value="${val}"]`,
+                );
+                if (rb) rb.checked = true;
+              } else {
+                const ta = document.getElementById(storageId);
+                if (ta) ta.value = val;
+              }
+            });
           } else {
-            const ta = document.getElementById(q.id);
-            if (ta) ta.value = val;
+            const val = localStorage.getItem(team + "_" + q.id);
+            if (!val) return;
+            if (q.type === "mcq") {
+              const rb = document.querySelector(
+                `input[name="${q.id}"][value="${val}"]`,
+              );
+              if (rb) rb.checked = true;
+            } else {
+              const ta = document.getElementById(q.id);
+              if (ta) ta.value = val;
+            }
           }
         });
-      }
-
-      function openPreview() {
-        let html = "";
-        questions.forEach((q) => {
-          let val = "";
-          if (q.type === "mcq")
-            val =
-              document.querySelector(`input[name="${q.id}"]:checked`)?.value ||
-              "Unanswered";
-          else val = document.getElementById(q.id)?.value || "Unanswered";
-          html += `<p><b>${q.id}:</b> ${val.substring(0, 50)}...</p>`;
-        });
-        document.getElementById("preview-content").innerHTML = html;
-        showModal("preview-modal");
       }
 
       async function finalSubmit() {
         const answers = {};
         questions.forEach((q) => {
-          if (q.type === "mcq")
+          if (q.type === "file-analysis" && q.subQuestions) {
+            answers[q.id] = {};
+            q.subQuestions.forEach((sq) => {
+              const storageId = `${q.id}_${sq.id}`;
+              if (sq.type === "mcq") {
+                answers[q.id][sq.id] = document.querySelector(
+                  `input[name="${storageId}"]:checked`,
+                )?.value;
+              } else {
+                answers[q.id][sq.id] =
+                  document.getElementById(storageId)?.value;
+              }
+            });
+          } else if (q.type === "mcq") {
             answers[q.id] = document.querySelector(
-              `input[name="${q.id}"]:checked`
+              `input[name="${q.id}"]:checked`,
             )?.value;
-          else answers[q.id] = document.getElementById(q.id)?.value;
+          } else {
+            answers[q.id] = document.getElementById(q.id)?.value;
+          }
         });
 
         const res = await fetch("/api/submit", {
@@ -546,9 +563,79 @@
         });
 
         if (res.ok) {
-          questions.forEach((q) => localStorage.removeItem(team + "_" + q.id));
+          localStorage.clear(); // Simpler cleanup for nested IDs
           hideModal("confirm-modal");
           showModal("success-modal");
+        }
+      }
+
+      function openPreview() {
+        let html =
+          '<div style="text-align: left; max-height: 400px; overflow-y: auto;">';
+
+        questions.forEach((q, i) => {
+          html += `<div style="margin-bottom: 15px; border-bottom: 1px solid #30363d; padding-bottom: 10px;">`;
+          html += `<b style="color: var(--blue);">Problem ${i + 1}:</b> `;
+
+          if (q.type === "file-analysis" && q.subQuestions) {
+            // Handle nested sub-questions for the preview
+            html += `<ul style="margin: 5px 0; padding-left: 20px; list-style: none;">`;
+            q.subQuestions.forEach((sq) => {
+              const storageId = `${q.id}_${sq.id}`;
+              let val = "";
+              if (sq.type === "mcq") {
+                val = document.querySelector(
+                  `input[name="${storageId}"]:checked`,
+                )?.value;
+              } else {
+                val = document.getElementById(storageId)?.value;
+              }
+              html += `<li style="font-size: 0.9em; margin-top: 5px;">
+                            <i style="color: #8b949e;">${sq.text}:</i> <br>
+                            <span style="color: #aff5b4;">${val || "⚠️ Unanswered"}</span>
+                         </li>`;
+            });
+            html += `</ul>`;
+          } else {
+            // Handle standard questions
+            let val = "";
+            if (q.type === "mcq") {
+              val = document.querySelector(
+                `input[name="${q.id}"]:checked`,
+              )?.value;
+            } else {
+              val = document.getElementById(q.id)?.value;
+            }
+            html += `<span style="color: #aff5b4;">${val || "⚠️ Unanswered"}</span>`;
+          }
+          html += `</div>`;
+        });
+
+        html += "</div>";
+        document.getElementById("preview-content").innerHTML = html;
+        showModal("preview-modal");
+      }
+
+      async function login() {
+        const inputName = document.getElementById("teamName").value.trim();
+        if (!inputName) return;
+        const res = await fetch("/api/validate-team", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamName: inputName }),
+        });
+        if (res.ok) {
+          team = inputName;
+          socket = io();
+          socket.on("connect", () => socket.emit("join-contest", team));
+          document.getElementById("login-overlay").style.display = "none";
+          document.getElementById("workspace").style.display = "flex";
+          document.getElementById("active-team").innerText =
+            "TEAM: " + team.toUpperCase();
+          initContest();
+        } else {
+          const data = await res.json();
+          document.getElementById("error-msg").innerText = data.error;
         }
       }
 

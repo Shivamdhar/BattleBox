@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -152,6 +152,7 @@
           <button class="btn-logout" onclick="logout()">Logout</button>
         </div>
       </div>
+
       <div class="header" style="margin-top: 30px">
         <h3>Live Server Health</h3>
       </div>
@@ -226,7 +227,7 @@
                 font-size: 12px;
                 color: var(--red);
               "
-              >UPLOAD ANSWERS.JSON (SECRET)</label
+              >UPLOAD ANSWERS.JSON</label
             >
             <input
               type="file"
@@ -236,20 +237,13 @@
             />
           </div>
         </div>
-
-        <div style="display: flex; gap: 10px">
-          <button
-            class="btn-refresh"
-            onclick="refreshConfig()"
-            style="background: var(--blue)"
-          >
-            Manual Sync S3 to Memory
-          </button>
-          <span
-            id="config-status"
-            style="font-size: 13px; color: #8b949e; align-self: center"
-          ></span>
-        </div>
+        <button
+          class="btn-refresh"
+          onclick="refreshConfig()"
+          style="background: var(--blue)"
+        >
+          Manual Sync S3 to Memory
+        </button>
       </div>
 
       <div class="controls">
@@ -259,17 +253,17 @@
             class="view-btn active"
             onclick="switchView('table')"
           >
-            Table View
+            Leaderboard
           </button>
           <button id="btn-chart" class="view-btn" onclick="switchView('chart')">
-            Performance Graph
+            Performance
           </button>
         </div>
         <input
           type="text"
           id="teamSearch"
           class="search-input"
-          placeholder="Search team name..."
+          placeholder="Search team..."
           onkeyup="filterData()"
         />
       </div>
@@ -278,59 +272,27 @@
         <table>
           <thead>
             <tr>
-              <th style="width: 40%">Team Name</th>
-              <th style="width: 20%">Score</th>
-              <th style="width: 40%">Submitted At</th>
+              <th>Team Name</th>
+              <th>Score</th>
+              <th>Submitted At</th>
             </tr>
           </thead>
-          <tbody id="table-body">
-            <tr>
-              <td colspan="3" style="text-align: center; padding: 40px">
-                Fetching records...
-              </td>
-            </tr>
-          </tbody>
+          <tbody id="table-body"></tbody>
         </table>
       </div>
 
-      <div id="chart-view">
-        <canvas id="scoreChart"></canvas>
-      </div>
+      <div id="chart-view"><canvas id="scoreChart"></canvas></div>
     </div>
 
     <script>
       let allSubmissions = [];
       let myChart = null;
 
-      // --- AUTH LOGIC ---
       async function logout() {
-        try {
-          // 1. Tell the server to kill the session
-          const response = await fetch("/api/admin/logout", { method: "POST" });
-
-          if (response.ok) {
-            // 2. ONLY redirect after the server confirms it's done
-            window.location.href = "/admin";
-          }
-        } catch (err) {
-          console.error("Logout failed", err);
-        }
+        await fetch("/api/admin/logout", { method: "POST" });
+        window.location.href = "/admin";
       }
 
-      // --- DATA LOADING ---
-      async function loadData() {
-        try {
-          const res = await fetch("/api/admin/submissions");
-          if (res.status === 401) return (window.location.href = "/admin");
-          allSubmissions = await res.json();
-          updateDisplay(allSubmissions);
-        } catch (e) {
-          document.getElementById("table-body").innerHTML =
-            '<tr><td colspan="3" style="text-align: center; color: var(--red)">Error connecting to server</td></tr>';
-        }
-      }
-
-      // --- S3 OPERATIONS ---
       async function handleUpload(filename, inputId) {
         const file = document.getElementById(inputId).files[0];
         if (!file) return;
@@ -344,9 +306,9 @@
               body: JSON.stringify({ filename, content }),
             });
             const result = await res.json();
-            alert(res.ok ? result.message : result.error);
+            alert(result.message || result.error);
           } catch (err) {
-            alert("Invalid JSON file");
+            alert("Invalid JSON file structure");
           }
         };
         reader.readAsText(file);
@@ -357,176 +319,156 @@
           method: "POST",
         });
         const data = await res.json();
-        if (res.ok)
-          alert(
-            "Server memory updated! Loaded " + data.questions + " questions."
-          );
+        alert("Success! " + data.questions + " questions now in memory.");
       }
 
-      // --- UI LOGIC ---
-      function switchView(view) {
-        document.getElementById("table-view").style.display =
-          view === "table" ? "block" : "none";
-        document.getElementById("chart-view").style.display =
-          view === "chart" ? "block" : "none";
-        document
-          .getElementById("btn-table")
-          .classList.toggle("active", view === "table");
-        document
-          .getElementById("btn-chart")
-          .classList.toggle("active", view === "chart");
-        if (view === "chart") renderChart(allSubmissions);
-      }
-
-      function updateDisplay(data) {
-        renderTable(data);
-        if (document.getElementById("chart-view").style.display === "block")
-          renderChart(data);
+      async function loadData() {
+        const res = await fetch("/api/admin/submissions");
+        if (res.status === 401) window.location.href = "/admin";
+        allSubmissions = await res.json();
+        renderTable(allSubmissions);
       }
 
       function renderTable(data) {
         const tbody = document.getElementById("table-body");
-        tbody.innerHTML = data.length
-          ? ""
-          : '<tr><td colspan="3" style="text-align:center;">No records found.</td></tr>';
-        data.forEach((sub) => {
-          const row = document.createElement("tr");
-          const date = new Date(sub.submittedAt);
-          row.innerHTML = `
-                    <td style="font-weight:bold; color:white;">${sub.teamName.toUpperCase()}</td>
-                    <td><span class="score-badge">${sub.score ?? 0}</span></td>
-                    <td><span class="timestamp">${date.toLocaleDateString()}</span> ${date.toLocaleTimeString()}</td>
-                `;
-          tbody.appendChild(row);
-        });
+        tbody.innerHTML = data
+          .map(
+            (sub) => `
+          <tr>
+            <td style="font-weight:bold;">${sub.teamName.toUpperCase()}</td>
+            <td><span class="score-badge">${sub.score}</span></td>
+            <td><span class="timestamp">${new Date(sub.submittedAt).toLocaleString()}</span></td>
+          </tr>
+        `,
+          )
+          .join("");
+      }
+
+      async function updateStats() {
+        try {
+          const res = await fetch("/api/admin/server-stats");
+          const text = await res.text();
+          const activeMatch = text.match(/Active connections: (\d+)/);
+          const reqsMatch = text.match(/\s+(\d+)\s+(\d+)\s+(\d+)/);
+          if (activeMatch)
+            document.getElementById("stat-active").innerText = activeMatch[1];
+          if (reqsMatch)
+            document.getElementById("stat-reqs").innerText = reqsMatch[3];
+        } catch (e) {
+          console.log("Stats fetch failed");
+        }
       }
 
       function renderChart(data) {
-        const ctx = document.getElementById("scoreChart").getContext("2d");
+        const canvas = document.getElementById("scoreChart");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
         if (myChart) myChart.destroy();
 
-        // 1. Group data by Team Name
-        const teams = {};
-        const allTimestamps = new Set();
+        if (!data || data.length === 0) return;
 
+        // Grouping submissions by team
+        const teams = {};
         data.forEach((sub) => {
           const team = sub.teamName.toUpperCase();
           if (!teams[team]) teams[team] = [];
 
+          // Ensure the timestamp is parsed correctly for both local/cloud
           const timestamp = new Date(sub.submittedAt).getTime();
           teams[team].push({ x: timestamp, y: sub.score || 0 });
-          allTimestamps.add(timestamp);
         });
 
-        // 2. Sort timestamps for the X-axis labels
-        const sortedLabels = Array.from(allTimestamps).sort((a, b) => a - b);
+        const colors = ["#58a6ff", "#238636", "#f85149", "#d29922", "#bc8cff"];
+        const datasets = Object.keys(teams).map((teamName, index) => ({
+          label: teamName,
+          data: teams[teamName].sort((a, b) => a.x - b.x),
+          borderColor: colors[index % colors.length],
+          tension: 0.3,
+          pointRadius: 4,
+        }));
 
-        // 3. Create a dataset for each team
-        const colors = [
-          "#58a6ff",
-          "#238636",
-          "#f85149",
-          "#d29922",
-          "#bc8cff",
-          "#fa7a18",
-        ];
-        const datasets = Object.keys(teams).map((teamName, index) => {
-          return {
-            label: teamName,
-            data: teams[teamName].sort((a, b) => a.x - b.x), // Ensure points are in time order
-            borderColor: colors[index % colors.length],
-            backgroundColor: colors[index % colors.length] + "33", // Add transparency
-            tension: 0.3, // Makes the line curved
-            fill: false,
-            pointRadius: 5,
-            pointHoverRadius: 7,
-          };
-        });
-
-        // 4. Initialize Chart.js Line Chart
         myChart = new Chart(ctx, {
           type: "line",
           data: { datasets },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: {
-              mode: "index",
-              intersect: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                suggestedMax: 100, // Change to your max possible contest score
+                grid: {
+                  color: (context) =>
+                    context.tick.value === 100
+                      ? "rgba(35, 134, 54, 0.5)"
+                      : "#30363d",
+                  lineWidth: (context) => (context.tick.value === 100 ? 2 : 1),
+                },
+                ticks: { color: "#8b949e" },
+              },
             },
             plugins: {
               legend: {
-                display: true,
-                position: "top",
                 labels: { color: "#c9d1d9" },
               },
               tooltip: {
+                enabled: true,
+                mode: "index",
+                intersect: false,
+                backgroundColor: "#161b22",
+                borderColor: "#30363d",
+                borderWidth: 1,
+                titleColor: "#58a6ff",
+                bodyColor: "#c9d1d9",
+                padding: 10,
+                displayColors: false, // Set to true if you want the color square back
                 callbacks: {
+                  // 1. THIS REMOVES THE LARGE NUMBER (Timestamp)
+                  title: function () {
+                    return "";
+                  },
+                  // 2. THIS FORMATS THE TEXT TO SHOW ONLY TEAM AND SCORE
                   label: function (context) {
-                    return `${context.dataset.label}: ${context.parsed.y} points`;
-                  },
-                  title: function (context) {
-                    return new Date(context[0].parsed.x).toLocaleString();
-                  },
-                },
-              },
-            },
-            scales: {
-              x: {
-                type: "linear", // Use linear to handle Unix timestamps
-                position: "bottom",
-                grid: { color: "#30363d" },
-                ticks: {
-                  color: "#8b949e",
-                  callback: function (value) {
-                    return new Date(value).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    });
+                    let label = context.dataset.label || "";
+                    if (label) {
+                      label += ": ";
+                    }
+                    if (context.parsed.y !== null) {
+                      label += context.parsed.y + " points";
+                    }
+                    return label;
                   },
                 },
-              },
-              y: {
-                beginAtZero: true,
-                grid: { color: "#30363d" },
-                ticks: { color: "#8b949e" },
               },
             },
           },
         });
       }
 
-      async function updateStats() {
-        try {
-          // You'll need an endpoint in your Node app that fetches from http://nginx-shield/nginx_status
-          const res = await fetch("/api/admin/server-stats");
-          const text = await res.text();
+      function switchView(view) {
+        // Toggle visibility of the containers
+        document.getElementById("table-view").style.display =
+          view === "table" ? "block" : "none";
+        document.getElementById("chart-view").style.display =
+          view === "chart" ? "block" : "none";
 
-          // Nginx stub_status parsing
-          const activeMatch = text.match(/Active connections: (\d+)/);
-          const reqsMatch = text.match(/\s+(\d+)\s+(\d+)\s+(\d+)/);
+        // Update button CSS classes
+        document
+          .getElementById("btn-table")
+          .classList.toggle("active", view === "table");
+        document
+          .getElementById("btn-chart")
+          .classList.toggle("active", view === "chart");
 
-          if (activeMatch)
-            document.getElementById("stat-active").innerText = activeMatch[1];
-          if (reqsMatch)
-            document.getElementById("stat-reqs").innerText = reqsMatch[3];
-        } catch (e) {
-          console.log("Stats update failed. Ensure proxy is configured.");
+        // Re-render chart if switching to chart view
+        if (view === "chart" && typeof renderChart === "function") {
+          renderChart(allSubmissions);
         }
       }
 
-      // Call this inside your existing loadData or setInterval
       setInterval(updateStats, 5000);
-      function filterData() {
-        const term = document.getElementById("teamSearch").value.toUpperCase();
-        const filtered = allSubmissions.filter((s) =>
-          s.teamName.toUpperCase().includes(term)
-        );
-        updateDisplay(filtered);
-      }
-
+      setInterval(loadData, 30000);
       loadData();
-      setInterval(loadData, 90000);
     </script>
   </body>
 </html>

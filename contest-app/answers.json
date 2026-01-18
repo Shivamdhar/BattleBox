@@ -6,12 +6,46 @@
   },
   "q2": {
     "type": "descriptive",
-     "keywords": ["scope", "function", "lexical"], 
+    "keywords": [
+      "lexical",
+      "environment",
+      "scope",
+      "function"
+    ],
     "score": 20
   },
   "q3": {
-    "type": "file-analysis",
-    "keywords": ["DEBUG", "true", "config.js", "process.env"],
-    "score": 40
+    "sq1": {
+      "type": "mcq",
+      "ans": "DEBUG",
+      "points": 15
+    }
+  },
+  "q4": {
+    "sq1": {
+      "type": "mcq",
+      "ans": "Unclosed Bracket",
+      "points": 10
+    },
+    "sq2": {
+      "type": "text",
+      "keywords": [
+        "comment",
+        "role",
+        "authorization",
+        "admin",
+        "check"
+      ],
+      "points": 20
+    },
+    "sq3": {
+      "type": "text",
+      "keywords": [
+        "> 0",
+        "greater than zero",
+        "positive"
+      ],
+      "points": 20
+    }
   }
 }
