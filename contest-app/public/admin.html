@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -26,7 +26,6 @@
         max-width: 1100px;
         margin: 0 auto;
       }
-
       .header {
         display: flex;
         justify-content: space-between;
@@ -37,7 +36,6 @@
         display: flex;
         gap: 10px;
       }
-
       .controls {
         display: flex;
         gap: 15px;
@@ -57,7 +55,6 @@
         flex-grow: 1;
         outline: none;
       }
-
       .view-btn {
         background: #21262d;
         color: var(--text);
@@ -72,7 +69,6 @@
         color: var(--bg);
         border-color: var(--blue);
       }
-
       #table-view,
       #chart-view {
         background: var(--card);
@@ -84,9 +80,37 @@
       }
       #chart-view {
         display: none;
-        height: 500px;
+        position: relative;
       }
-
+      /* Fullscreen Specific Styles */
+      #chart-container {
+        width: 100%;
+        height: 500px;
+        position: relative;
+      }
+      #chart-container:fullscreen {
+        width: 100vw !important;
+        height: 100vh !important;
+        background: var(--bg) !important;
+        padding: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .fullscreen-icon {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        cursor: pointer;
+        z-index: 10;
+        padding: 8px;
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 6px;
+        transition: 0.2s;
+      }
+      .fullscreen-icon:hover {
+        background: rgba(0, 0, 0, 0.8);
+      }
       table {
         width: 100%;
         border-collapse: collapse;
@@ -105,7 +129,6 @@
       tr:hover {
         background: #1c2128;
       }
-
       .btn-refresh {
         background: var(--green);
         color: white;
@@ -129,7 +152,6 @@
         background: var(--red);
         color: white;
       }
-
       .score-badge {
         color: var(--green);
         font-weight: bold;
@@ -156,20 +178,10 @@
       <div class="header" style="margin-top: 30px">
         <h3>Live Server Health</h3>
       </div>
-      <div
-        class="controls"
-        id="status-panel"
-        style="
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          text-align: center;
-        "
-      >
+      <div class="controls" id="status-panel" style="display: grid; grid-template-columns: repeat(3, 1fr); text-align: center;">
         <div>
           <div style="font-size: 12px; color: var(--blue)">ACTIVE SESSIONS</div>
-          <div id="stat-active" style="font-size: 24px; font-weight: bold">
-            0
-          </div>
+          <div id="stat-active" style="font-size: 24px; font-weight: bold">0</div>
         </div>
         <div>
           <div style="font-size: 12px; color: var(--green)">TOTAL REQUESTS</div>
@@ -177,95 +189,30 @@
         </div>
         <div>
           <div style="font-size: 12px; color: var(--red)">THROTTLED IPS</div>
-          <div id="stat-blocked" style="font-size: 24px; font-weight: bold">
-            -
-          </div>
+          <div id="stat-blocked" style="font-size: 24px; font-weight: bold">-</div>
         </div>
       </div>
 
-      <div
-        class="controls"
-        style="flex-direction: column; align-items: flex-start; gap: 20px"
-      >
+      <div class="controls" style="flex-direction: column; align-items: flex-start; gap: 20px">
         <div style="display: flex; gap: 15px; width: 100%">
-          <div
-            style="
-              flex: 1;
-              border: 1px dashed var(--border);
-              padding: 15px;
-              border-radius: 8px;
-            "
-          >
-            <label
-              style="
-                display: block;
-                margin-bottom: 10px;
-                font-size: 12px;
-                color: var(--blue);
-              "
-              >UPLOAD QUESTIONS.JSON</label
-            >
-            <input
-              type="file"
-              id="qFile"
-              accept=".json"
-              onchange="handleUpload('questions.json', 'qFile')"
-            />
+          <div style="flex: 1; border: 1px dashed var(--border); padding: 15px; border-radius: 8px;">
+            <label style="display: block; margin-bottom: 10px; font-size: 12px; color: var(--blue);">UPLOAD QUESTIONS.JSON</label>
+            <input type="file" id="qFile" accept=".json" onchange="handleUpload('questions.json', 'qFile')" />
           </div>
-          <div
-            style="
-              flex: 1;
-              border: 1px dashed var(--border);
-              padding: 15px;
-              border-radius: 8px;
-            "
-          >
-            <label
-              style="
-                display: block;
-                margin-bottom: 10px;
-                font-size: 12px;
-                color: var(--red);
-              "
-              >UPLOAD ANSWERS.JSON</label
-            >
-            <input
-              type="file"
-              id="aFile"
-              accept=".json"
-              onchange="handleUpload('answers.json', 'aFile')"
-            />
+          <div style="flex: 1; border: 1px dashed var(--border); padding: 15px; border-radius: 8px;">
+            <label style="display: block; margin-bottom: 10px; font-size: 12px; color: var(--red);">UPLOAD ANSWERS.JSON</label>
+            <input type="file" id="aFile" accept=".json" onchange="handleUpload('answers.json', 'aFile')" />
           </div>
         </div>
-        <button
-          class="btn-refresh"
-          onclick="refreshConfig()"
-          style="background: var(--blue)"
-        >
-          Manual Sync S3 to Memory
-        </button>
+        <button class="btn-refresh" onclick="refreshConfig()" style="background: var(--blue)">Manual Sync S3 to Memory</button>
       </div>
 
       <div class="controls">
         <div style="display: flex; gap: 5px">
-          <button
-            id="btn-table"
-            class="view-btn active"
-            onclick="switchView('table')"
-          >
-            Leaderboard
-          </button>
-          <button id="btn-chart" class="view-btn" onclick="switchView('chart')">
-            Performance
-          </button>
+          <button id="btn-table" class="view-btn active" onclick="switchView('table')">Leaderboard</button>
+          <button id="btn-chart" class="view-btn" onclick="switchView('chart')">Performance</button>
         </div>
-        <input
-          type="text"
-          id="teamSearch"
-          class="search-input"
-          placeholder="Search team..."
-          onkeyup="filterData()"
-        />
+        <input type="text" id="teamSearch" class="search-input" placeholder="Search team..." onkeyup="filterData()" />
       </div>
 
       <div id="table-view">
@@ -281,7 +228,16 @@
         </table>
       </div>
 
-      <div id="chart-view"><canvas id="scoreChart"></canvas></div>
+      <div id="chart-view">
+        <div id="chart-container">
+          <div class="fullscreen-icon" onclick="toggleFullScreen()" title="Toggle Fullscreen">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+            </svg>
+          </div>
+          <canvas id="scoreChart"></canvas>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -315,48 +271,42 @@
       }
 
       async function refreshConfig() {
-        const res = await fetch("/api/admin/refresh-config", {
-          method: "POST",
-        });
+        const res = await fetch("/api/admin/refresh-config", { method: "POST" });
         const data = await res.json();
         alert("Success! " + data.questions + " questions now in memory.");
       }
 
       async function loadData() {
-        const res = await fetch("/api/admin/submissions");
-        if (res.status === 401) window.location.href = "/admin";
-        allSubmissions = await res.json();
-        renderTable(allSubmissions);
+        try {
+          const res = await fetch("/api/admin/submissions");
+          if (res.status === 401) window.location.href = "/admin";
+          allSubmissions = await res.json();
+          renderTable(allSubmissions);
+          // If the chart is currently visible, update it live
+          if (document.getElementById("chart-view").style.display === "block") {
+            renderChart(allSubmissions);
+          }
+        } catch (e) {
+          console.error("Data load failed", e);
+        }
       }
 
       function renderTable(data) {
         const tbody = document.getElementById("table-body");
         tbody.innerHTML = data
-          .map(
-            (sub) => `
+          .map((sub) => `
           <tr>
-            <td style="font-weight:bold;">${sub.teamName.toUpperCase()}</td>
+            <td style="font-weight:bold; color:white;">${sub.teamName.toUpperCase()}</td>
             <td><span class="score-badge">${sub.score}</span></td>
             <td><span class="timestamp">${new Date(sub.submittedAt).toLocaleString()}</span></td>
           </tr>
-        `,
-          )
-          .join("");
+        `).join("");
       }
 
-      async function updateStats() {
-        try {
-          const res = await fetch("/api/admin/server-stats");
-          const text = await res.text();
-          const activeMatch = text.match(/Active connections: (\d+)/);
-          const reqsMatch = text.match(/\s+(\d+)\s+(\d+)\s+(\d+)/);
-          if (activeMatch)
-            document.getElementById("stat-active").innerText = activeMatch[1];
-          if (reqsMatch)
-            document.getElementById("stat-reqs").innerText = reqsMatch[3];
-        } catch (e) {
-          console.log("Stats fetch failed");
-        }
+      function filterData() {
+        const term = document.getElementById("teamSearch").value.toUpperCase();
+        const filtered = allSubmissions.filter(s => s.teamName.toUpperCase().includes(term));
+        renderTable(filtered);
       }
 
       function renderChart(data) {
@@ -364,27 +314,27 @@
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (myChart) myChart.destroy();
-
         if (!data || data.length === 0) return;
 
-        // Grouping submissions by team
         const teams = {};
         data.forEach((sub) => {
           const team = sub.teamName.toUpperCase();
           if (!teams[team]) teams[team] = [];
-
-          // Ensure the timestamp is parsed correctly for both local/cloud
           const timestamp = new Date(sub.submittedAt).getTime();
           teams[team].push({ x: timestamp, y: sub.score || 0 });
         });
 
-        const colors = ["#58a6ff", "#238636", "#f85149", "#d29922", "#bc8cff"];
+        const colors = ["#FF5733", "#33FF57", "#3357FF", "#F333FF", "#FF33A1", "#33FFF6", "#F6FF33"];
+
         const datasets = Object.keys(teams).map((teamName, index) => ({
           label: teamName,
           data: teams[teamName].sort((a, b) => a.x - b.x),
           borderColor: colors[index % colors.length],
-          tension: 0.3,
-          pointRadius: 4,
+          backgroundColor: colors[index % colors.length],
+          borderWidth: 3,
+          stepped: true,
+          pointRadius: 5,
+          pointHoverRadius: 8
         }));
 
         myChart = new Chart(ctx, {
@@ -393,77 +343,73 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: false },
             scales: {
+              x: {
+                type: "linear",
+                grid: { color: "#21262d" },
+                ticks: {
+                  color: "#8b949e",
+                  callback: (val) => new Date(val).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }
+              },
               y: {
                 beginAtZero: true,
-                suggestedMax: 100, // Change to your max possible contest score
-                grid: {
-                  color: (context) =>
-                    context.tick.value === 100
-                      ? "rgba(35, 134, 54, 0.5)"
-                      : "#30363d",
-                  lineWidth: (context) => (context.tick.value === 100 ? 2 : 1),
-                },
-                ticks: { color: "#8b949e" },
-              },
+                grid: { color: "#21262d" },
+                ticks: { color: "#8b949e" }
+              }
             },
             plugins: {
               legend: {
-                labels: { color: "#c9d1d9" },
+                position: 'top',
+                labels: { color: "#c9d1d9", padding: 20, usePointStyle: true }
               },
               tooltip: {
                 enabled: true,
-                mode: "index",
-                intersect: false,
                 backgroundColor: "#161b22",
                 borderColor: "#30363d",
                 borderWidth: 1,
-                titleColor: "#58a6ff",
-                bodyColor: "#c9d1d9",
-                padding: 10,
-                displayColors: false, // Set to true if you want the color square back
+                displayColors: true,
                 callbacks: {
-                  // 1. THIS REMOVES THE LARGE NUMBER (Timestamp)
-                  title: function () {
-                    return "";
-                  },
-                  // 2. THIS FORMATS THE TEXT TO SHOW ONLY TEAM AND SCORE
-                  label: function (context) {
-                    let label = context.dataset.label || "";
-                    if (label) {
-                      label += ": ";
-                    }
-                    if (context.parsed.y !== null) {
-                      label += context.parsed.y + " points";
-                    }
-                    return label;
-                  },
-                },
-              },
-            },
-          },
+                  title: () => "", 
+                  label: (context) => ` ${context.dataset.label}: ${context.parsed.y} points`
+                }
+              }
+            }
+          }
         });
       }
 
       function switchView(view) {
-        // Toggle visibility of the containers
-        document.getElementById("table-view").style.display =
-          view === "table" ? "block" : "none";
-        document.getElementById("chart-view").style.display =
-          view === "chart" ? "block" : "none";
+        document.getElementById("table-view").style.display = view === "table" ? "block" : "none";
+        document.getElementById("chart-view").style.display = view === "chart" ? "block" : "none";
+        document.getElementById("btn-table").classList.toggle("active", view === "table");
+        document.getElementById("btn-chart").classList.toggle("active", view === "chart");
 
-        // Update button CSS classes
-        document
-          .getElementById("btn-table")
-          .classList.toggle("active", view === "table");
-        document
-          .getElementById("btn-chart")
-          .classList.toggle("active", view === "chart");
+        if (view === "chart") renderChart(allSubmissions);
+      }
 
-        // Re-render chart if switching to chart view
-        if (view === "chart" && typeof renderChart === "function") {
-          renderChart(allSubmissions);
+      function toggleFullScreen() {
+        const container = document.getElementById('chart-container');
+        if (!document.fullscreenElement) {
+          if (container.requestFullscreen) container.requestFullscreen();
+          else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen();
+        } else {
+          if (document.exitFullscreen) document.exitFullscreen();
         }
+      }
+
+      document.addEventListener('fullscreenchange', () => { if (myChart) myChart.resize(); });
+
+      async function updateStats() {
+        try {
+          const res = await fetch("/api/admin/server-stats");
+          const text = await res.text();
+          const activeMatch = text.match(/Active connections: (\d+)/);
+          const reqsMatch = text.match(/\s+(\d+)\s+(\d+)\s+(\d+)/);
+          if (activeMatch) document.getElementById("stat-active").innerText = activeMatch[1];
+          if (reqsMatch) document.getElementById("stat-reqs").innerText = reqsMatch[3];
+        } catch (e) { console.log("Stats fetch failed"); }
       }
 
       setInterval(updateStats, 5000);

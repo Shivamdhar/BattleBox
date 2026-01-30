@@ -29,7 +29,7 @@ const io = new Server(server, {
 });
 
 const PORT = 3000;
-const BUCKET_NAME = "my-contest-data-varun-2026"; 
+const BUCKET_NAME = "my-contest-data-2026"; 
 
 const db = new sqlite3.Database('./data/contest.db');
 db.serialize(() => {
