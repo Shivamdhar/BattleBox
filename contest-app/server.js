@@ -85,7 +85,7 @@ app.get('/api/questions', (req, res) => res.json(contestQuestions));
 
 app.post('/api/validate-team', (req, res) => {
     const { teamName } = req.body;
-    if (!teamName || teamName.trim().length < 3) return res.status(400).json({ error: "Invalid Name" });
+    if (!teamName || teamName.trim().length < 2) return res.status(400).json({ error: "Invalid Name: Team name should have atleast 2 chars" });
     const cleanName = teamName.trim().toLowerCase();
 
     db.get("SELECT teamName FROM submissions WHERE LOWER(teamName) = ?", [cleanName], (err, row) => {
