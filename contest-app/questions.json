@@ -1,0 +1,76 @@
+[
+  {
+    "id": "q1",
+    "type": "mcq",
+    "description": "Which company developed the JavaScript language?",
+    "options": [
+      "Microsoft",
+      "Netscape",
+      "Sun Microsystems",
+      "Google"
+    ]
+  },
+  {
+    "id": "q2",
+    "type": "descriptive",
+    "description": " Explain the concept of \"Closures\" in JavaScript."
+  },
+  {
+    "id": "q3",
+    "type": "file-analysis",
+    "title": "Environment Vulnerability",
+    "description": "Examine the files and identify which setting is exposing sensitive data.",
+    "files": {
+      "server.js": "const express = require('express');\nconst config = require('./config');\nconst app = express();\n\napp.get('/status', (req, res) => {\n  if (config.DEBUG) {\n    res.json({ env: process.env, config: config });\n  } else {\n    res.send('Server OK');\n  }\n});",
+      "config.js": "module.exports = {\n  PORT: 3000,\n  DEBUG: true,\n  DB_NAME: 'contest_db'\n};"
+    },
+    "subQuestions": [
+      {
+        "id": "sq1",
+        "text": "Identify the variable causing the data leak:",
+        "type": "mcq",
+        "options": [
+          "PORT",
+          "DEBUG",
+          "DB_NAME"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "q4",
+    "type": "file-analysis",
+    "title": "Debug the Payment Module",
+    "description": "A junior dev left the payment gateway in a broken state.\n 1) Find the syntax error in file1.\n 2) Identify the security flaw in file2.\n 3) Propose a fix for the validation logic in file3.",
+    "files": {
+      "gateway.js": "// file1.js\nconst gateway = 'STRIPE_API_KEY';\nfunction init() {\n  if(!gateway) {\n    console.log('Error')\n  // Missing closing brace here\n}",
+      "processor.js": "// file2.js\nfunction processPayment(amount, userRole) {\n  // Security Flaw: Role check is commented out!\n  // if (userRole !== 'admin') return 'Unauthorized';\n  return `Processing $${amount} for anyone!`;\n}",
+      "validator.js": "// file3.js\nfunction validateAmount(amt) {\n  // Needs to check if amount is positive\n  return amt != 0;\n}"
+    },
+    "subQuestions": [
+      {
+        "id": "sq1",
+        "text": "What is the syntax error in gateway.js?",
+        "type": "mcq",
+        "options": [
+          "Unclosed Bracket",
+          "Missing Semicolon",
+          "Undefined Variable",
+          "Constant Redeclaration"
+        ]
+      },
+      {
+        "id": "sq2",
+        "text": "Identify the security flaw in processor.js:",
+        "type": "text",
+        "placeholder": "What did the developer forget to do?"
+      },
+      {
+        "id": "sq3",
+        "text": "How should the return statement in validator.js be fixed to ensure only positive amounts are allowed?",
+        "type": "text",
+        "placeholder": "Provide the JS expression..."
+      }
+    ]
+  }
+]

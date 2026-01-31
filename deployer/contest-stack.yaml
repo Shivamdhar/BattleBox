@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Contest Infrastructure: Auto-KeyPair, EC2, S3, SSM Parameters, 2GB Swap, and IAM Security'
+
+Parameters:
+  BucketName:
+    Description: Unique name for your S3 bucket (Must be globally unique)
+    Type: String
+    Default: "my-unique-contest-data-2026"
+  AdminUsername:
+    Type: String
+    Default: "admin"
+    Description: "Username for the contest admin dashboard"
+  AdminPassword:
+    Type: String
+    NoEcho: true
+    Description: "Password for the contest admin dashboard"
+
+Resources:
+  # 1. AUTOMATIC KEY PAIR (Stores private key in SSM Parameter Store)
+  ContestKeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Sub "${AWS::StackName}-key"
+
+  # 2. S3 BUCKET
+  ContestDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # 3. SSM PARAMETER STORE
+  AdminUserParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /contest/admin_user
+      Type: String
+      Value: !Ref AdminUsername
+
+  AdminPassParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /contest/admin_pass
+      Type: String
+      Value: !Ref AdminPassword
+
+  # 4. IAM ROLE & PROFILE
+  ContestInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ec2.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: ContestAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 'ssm:GetParameter'
+                  - 'ssm:GetParameters'
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/contest/*'
+              - Effect: Allow
+                Action: 
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:ListBucket'
+                Resource: 
+                  - !Sub 'arn:aws:s3:::${BucketName}'
+                  - !Sub 'arn:aws:s3:::${BucketName}/*'
+
+  ContestInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref ContestInstanceRole]
+
+  # 5. SECURITY GROUP
+  ContestSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP (80) and SSH (22)
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  # 6. EC2 INSTANCE
+  ContestServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      ImageId: ami-0c7217cdde317cfec # Ubuntu 22.04 LTS (Verify ID for your region)
+      KeyName: !Ref ContestKeyPair
+      IamInstanceProfile: !Ref ContestInstanceProfile
+      SecurityGroupIds: [!Ref ContestSecurityGroup]
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # 1. Basic setup
+          apt-get update -y
+          apt-get install -y docker.io git curl unzip
+
+          # 2. VALID AWS CLI v2 INSTALLATION
+          cd /tmp
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip -q awscliv2.zip
+          sudo ./aws/install --update
+          rm -rf awscliv2.zip aws
+
+          # 3. Docker setup
+          systemctl start docker
+          systemctl enable docker
+          usermod -aG docker ubuntu
+
+          # 4. Swap and Persistence
+          dd if=/dev/zero of=/swapfile bs=1M count=2048
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+          mkdir -p /home/ubuntu/app/data
+          chown -R ubuntu:ubuntu /home/ubuntu/app
+
+Outputs:
+  ServerIP:
+    Description: Public IP of your Contest Server
+    Value: !GetAtt ContestServer.PublicIp
+  S3BucketName:
+    Description: The actual bucket created
+    Value: !Ref ContestDataBucket
+  KeyPairName:
+    Description: Name of the generated KeyPair
+    Value: !Ref ContestKeyPair

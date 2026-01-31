@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Contest Engine | Dynamic Workspace</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --card: #161b22;
+        --blue: #58a6ff;
+        --green: #238636;
+        --border: #30363d;
+        --text: #c9d1d9;
+        --red: #f85149;
+        --sidebar: #010409;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, sans-serif;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      #workspace {
+        display: none;
+        height: 100vh;
+        flex-direction: column;
+      }
+      #login-overlay {
+        position: fixed;
+        inset: 0;
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+      .login-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        padding: 40px;
+        border-radius: 10px;
+        width: 320px;
+        text-align: center;
+      }
+
+      .header {
+        height: 60px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 25px;
+        background: var(--card);
+        z-index: 10;
+      }
+      .main {
+        display: flex;
+        height: calc(100vh - 60px);
+      }
+
+      .sidebar {
+        width: 80px;
+        background: var(--sidebar);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: 20px;
+      }
+      .q-tab {
+        width: 50px;
+        height: 50px;
+        margin-bottom: 15px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        background: var(--card);
+        border: 1px solid var(--border);
+        font-weight: bold;
+        transition: 0.2s;
+        color: #8b949e;
+      }
+      .q-tab:hover {
+        border-color: var(--blue);
+      }
+      .q-tab.active {
+        background: var(--blue);
+        color: white;
+        border-color: var(--blue);
+        box-shadow: 0 0 10px rgba(88, 166, 255, 0.3);
+      }
+
+      .content-area {
+        flex: 1;
+        display: flex;
+        overflow: hidden;
+      }
+      .pane-desc {
+        width: 45%;
+        padding: 30px;
+        overflow-y: auto;
+        border-right: 1px solid var(--border);
+        background: var(--bg);
+      }
+      .pane-input {
+        width: 55%;
+        padding: 30px;
+        overflow-y: auto;
+        background: #0d1117;
+      }
+
+      .q-panel {
+        display: none;
+        height: 100%;
+        width: 100%;
+      }
+      .q-panel.active {
+        display: flex;
+      }
+
+      /* File Explorer UI */
+      .file-explorer {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        margin-top: 15px;
+        background: #010409;
+      }
+      .file-tabs {
+        display: flex;
+        background: #161b22;
+        border-bottom: 1px solid var(--border);
+        overflow-x: auto;
+      }
+      .file-link {
+        padding: 10px 15px;
+        cursor: pointer;
+        border-right: 1px solid var(--border);
+        font-size: 13px;
+        color: #8b949e;
+        transition: 0.2s;
+        white-space: nowrap;
+      }
+      .file-link:hover {
+        background: #1c2128;
+        color: var(--text);
+      }
+      .file-link.active {
+        background: #0d1117;
+        color: var(--blue);
+        border-bottom: 2px solid var(--blue);
+      }
+      .file-viewer {
+        padding: 15px;
+        height: 300px;
+        overflow-y: auto;
+        font-family: "Fira Code", monospace;
+        font-size: 13px;
+        color: #d1d5da;
+        white-space: pre;
+        line-height: 1.5;
+      }
+
+      .mcq-option {
+        display: block;
+        padding: 15px;
+        margin: 10px 0;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: 0.2s;
+      }
+      .mcq-option:hover {
+        border-color: var(--blue);
+        background: #1c2128;
+      }
+      textarea {
+        width: 100%;
+        height: 400px;
+        background: #010409;
+        color: var(--blue);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 20px;
+        font-family: "Fira Code", monospace;
+        resize: none;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .btn {
+        padding: 10px 20px;
+        border-radius: 6px;
+        border: none;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      .btn-green {
+        background: var(--green);
+        color: white;
+      }
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+      }
+      .modal-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        padding: 30px;
+        border-radius: 12px;
+        width: 500px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="login-overlay">
+      <div class="login-card">
+        <h2 style="color: var(--blue)">Join Contest</h2>
+        <input
+          type="text"
+          id="teamName"
+          placeholder="Enter Team Name"
+          style="
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            background: #010409;
+            border: 1px solid var(--border);
+            color: white;
+            border-radius: 6px;
+          "
+        />
+        <p id="error-msg" style="color: var(--red); font-size: 13px"></p>
+        <button class="btn btn-green" style="width: 100%" onclick="login()">
+          Start Session
+        </button>
+      </div>
+    </div>
+
+    <div id="workspace">
+      <div class="header">
+        <div
+          id="active-team"
+          style="color: var(--blue); font-weight: bold"
+        ></div>
+        <button class="btn btn-green" onclick="openPreview()">
+          Finish & Submit
+        </button>
+      </div>
+
+      <div class="main">
+        <div class="sidebar" id="dynamic-tabs"></div>
+        <div class="content-area" id="dynamic-panels"></div>
+      </div>
+    </div>
+
+    <div id="preview-modal" class="modal-overlay">
+      <div class="modal-card">
+        <h2>Review Answers</h2>
+        <div
+          id="preview-content"
+          style="
+            text-align: left;
+            background: #010409;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+          "
+        ></div>
+        <div style="margin-top: 20px">
+          <button
+            class="btn"
+            style="
+              background: transparent;
+              border: 1px solid var(--border);
+              color: white;
+            "
+            onclick="hideModal('preview-modal')"
+          >
+            Edit
+          </button>
+          <button
+            class="btn btn-green"
+            onclick="
+              showModal('confirm-modal');
+              hideModal('preview-modal');
+            "
+          >
+            Submit
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="confirm-modal" class="modal-overlay">
+      <div class="modal-card">
+        <h3>Final Submit?</h3>
+        <button class="btn" onclick="hideModal('confirm-modal')">Cancel</button
+        ><button class="btn btn-green" onclick="finalSubmit()">Confirm</button>
+      </div>
+    </div>
+
+    <div id="success-modal" class="modal-overlay">
+      <div class="modal-card">
+        <h1 style="color: var(--green)">✓</h1>
+        <h2>Submitted!</h2>
+        <button class="btn btn-green" onclick="location.reload()">
+          Finish
+        </button>
+      </div>
+    </div>
+
+    <script>
+      let socket;
+      let team = "";
+      let questions = [];
+
+      // 1. DYNAMIC UI GENERATOR
+      async function initContest() {
+        try {
+          const res = await fetch("/api/questions");
+          questions = await res.json();
+
+          const tabsContainer = document.getElementById("dynamic-tabs");
+          const panelsContainer = document.getElementById("dynamic-panels");
+
+          if (questions.length === 0) {
+            tabsContainer.innerHTML = "";
+            panelsContainer.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 80vh; text-align: center; color: #8b949e;">
+                    <div style="font-size: 64px; margin-bottom: 20px;">⏳</div>
+                    <h2 style="color: var(--blue);">Waiting for Launch</h2>
+                    <p style="max-width: 400px; line-height: 1.6;">The administrator is preparing the environment.</p>
+                </div>`;
+            setTimeout(initContest, 10000);
+            return;
+          }
+
+          tabsContainer.innerHTML = "";
+          panelsContainer.innerHTML = "";
+
+          questions.forEach((q, i) => {
+            const qNum = i + 1;
+            const tab = document.createElement("div");
+            tab.className = `q-tab ${i === 0 ? "active" : ""}`;
+            tab.id = `tab${qNum}`;
+            tab.innerText = qNum;
+            tab.onclick = () => switchTab(qNum);
+            tabsContainer.appendChild(tab);
+
+            const panel = document.createElement("div");
+            panel.id = `panel${qNum}`;
+            panel.className = `q-panel ${i === 0 ? "active" : ""}`;
+
+            // --- GENERATE INPUT HTML BASED ON TYPE ---
+            let inputHtml = "";
+
+            if (q.type === "file-analysis" && q.subQuestions) {
+              inputHtml =
+                `
+        <div class="task-header" style="margin-bottom: 15px; padding: 10px; border-bottom: 1px solid var(--border);">
+            <span style="color: var(--blue); font-weight: bold; font-size: 0.9em;">📋 COMPLETE THE FOLLOWING TASKS:</span>
+        </div>
+        ` +
+                q.subQuestions
+                  .map(
+                    (sq, idx) => `
+        <div class="sub-q-block" style="margin-bottom: 20px; padding: 20px; background: #0d1117; border-radius: 8px; border: 1px solid var(--border);">
+            <label style="display:block; margin-bottom: 12px; font-weight: 600; font-size: 0.95em;">
+                <span style="color: var(--blue); margin-right: 8px;">Task ${idx + 1}:</span> ${sq.text}
+            </label>
+            ${
+              sq.type === "mcq"
+                ? sq.options
+                    .map(
+                      (opt) => `
+                    <label class="mcq-option" style="background: #161b22; border: 1px solid #30363d; padding: 10px; margin-bottom: 8px; border-radius: 6px; display: block; cursor: pointer;">
+                        <input type="radio" name="${q.id}_${sq.id}" value="${opt}" onchange="saveDraft('${q.id}_${sq.id}', this.value)"> 
+                        <span style="margin-left: 10px;">${opt}</span>
+                    </label>
+                `,
+                    )
+                    .join("")
+                : `<textarea id="${q.id}_${sq.id}" 
+                    style="width: 100%; height: 80px; background: #010409; border: 1px solid var(--border); color: white; padding: 12px; border-radius: 6px; font-family: monospace;"
+                    placeholder="Enter your technical analysis..." 
+                    oninput="saveDraft('${q.id}_${sq.id}', this.value)"></textarea>`
+            }
+        </div>
+    `,
+                  )
+                  .join("");
+            } else if (q.type === "mcq") {
+              // EXISTING: Standard MCQ
+              inputHtml = q.options
+                .map(
+                  (opt) =>
+                    `<label class="mcq-option"><input type="radio" name="${q.id}" value="${opt}" onchange="saveDraft('${q.id}', this.value)"> ${opt}</label>`,
+                )
+                .join("");
+            } else {
+              // EXISTING: Standard Text
+              inputHtml = `<textarea id="${q.id}" placeholder="Type your answer..." oninput="saveDraft('${q.id}', this.value)"></textarea>`;
+            }
+
+            panel.innerHTML = `
+    <div class="pane-desc">
+        <div style="background: rgba(88, 166, 255, 0.1); padding: 15px; border-radius: 8px; border-left: 4px solid var(--blue); margin-bottom: 20px;">
+            <h3 style="margin-top:0;">${q.title || "Analysis Task"}</h3>
+            <p style="margin-bottom:0; color: #8b949e; line-height: 1.5;">${q.description}</p>
+        </div>
+        ${q.type === "file-analysis" ? renderFileExplorerHtml(q) : ""}
+    </div>
+    <div class="pane-input">
+        <div class="response-card" style="background: var(--card); border: 1px solid var(--border); padding: 20px; border-radius: 12px; height: 100%; overflow-y: auto;">
+            ${inputHtml}
+        </div>
+    </div>
+`;
+            panelsContainer.appendChild(panel);
+          });
+          loadDrafts();
+        } catch (e) {
+          console.error("Sync error:", e);
+        }
+      }
+
+      // 2. HELPER FUNCTIONS
+      function renderFileExplorerHtml(q) {
+        if (!q.files) return "";
+        const fileNames = Object.keys(q.files);
+        const tabHtml = fileNames
+          .map(
+            (name, i) => `
+        <div class="file-link ${i === 0 ? "active" : ""}" 
+             style="display: flex; align-items: center; gap: 8px; padding: 8px 15px; font-size: 13px; border-right: 1px solid var(--bg);"
+             onclick="openFile('${q.id}', '${name}', this)">
+            <span style="color: #e3b341;">JS</span> ${name}
+        </div>
+    `,
+          )
+          .join("");
+
+        return `
+        <div class="file-explorer" style="border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #010409;">
+            <div class="file-tabs" style="background: #161b22; display: flex; border-bottom: 1px solid var(--border);">${tabHtml}</div>
+            <pre class="file-viewer" id="viewer-${q.id}" 
+                 style="margin: 0; padding: 20px; color: #d1d5db; font-family: 'Fira Code', monospace; font-size: 14px; line-height: 1.6; overflow-x: auto; min-height: 200px;">${q.files[fileNames[0]]}</pre>
+        </div>`;
+      }
+
+      function openFile(qId, fileName, el) {
+        const parent = el.closest(".file-explorer");
+        parent
+          .querySelectorAll(".file-link")
+          .forEach((l) => l.classList.remove("active"));
+        el.classList.add("active");
+        const questionData = questions.find((q) => q.id === qId);
+        document.getElementById(`viewer-${qId}`).textContent =
+          questionData.files[fileName];
+      }
+
+      function switchTab(qNum) {
+        document
+          .querySelectorAll(".q-tab")
+          .forEach((t) => t.classList.remove("active"));
+        document.getElementById("tab" + qNum).classList.add("active");
+        document
+          .querySelectorAll(".q-panel")
+          .forEach((p) => p.classList.remove("active"));
+        document.getElementById("panel" + qNum).classList.add("active");
+      }
+
+      // 3. STORAGE & SUBMISSION (Handles Sub-Questions)
+      function saveDraft(id, val) {
+        if (team) localStorage.setItem(team + "_" + id, val);
+      }
+
+      function loadDrafts() {
+        questions.forEach((q) => {
+          if (q.type === "file-analysis" && q.subQuestions) {
+            q.subQuestions.forEach((sq) => {
+              const storageId = `${q.id}_${sq.id}`;
+              const val = localStorage.getItem(team + "_" + storageId);
+              if (!val) return;
+              if (sq.type === "mcq") {
+                const rb = document.querySelector(
+                  `input[name="${storageId}"][value="${val}"]`,
+                );
+                if (rb) rb.checked = true;
+              } else {
+                const ta = document.getElementById(storageId);
+                if (ta) ta.value = val;
+              }
+            });
+          } else {
+            const val = localStorage.getItem(team + "_" + q.id);
+            if (!val) return;
+            if (q.type === "mcq") {
+              const rb = document.querySelector(
+                `input[name="${q.id}"][value="${val}"]`,
+              );
+              if (rb) rb.checked = true;
+            } else {
+              const ta = document.getElementById(q.id);
+              if (ta) ta.value = val;
+            }
+          }
+        });
+      }
+
+      async function finalSubmit() {
+        const answers = {};
+        questions.forEach((q) => {
+          if (q.type === "file-analysis" && q.subQuestions) {
+            answers[q.id] = {};
+            q.subQuestions.forEach((sq) => {
+              const storageId = `${q.id}_${sq.id}`;
+              if (sq.type === "mcq") {
+                answers[q.id][sq.id] = document.querySelector(
+                  `input[name="${storageId}"]:checked`,
+                )?.value;
+              } else {
+                answers[q.id][sq.id] =
+                  document.getElementById(storageId)?.value;
+              }
+            });
+          } else if (q.type === "mcq") {
+            answers[q.id] = document.querySelector(
+              `input[name="${q.id}"]:checked`,
+            )?.value;
+          } else {
+            answers[q.id] = document.getElementById(q.id)?.value;
+          }
+        });
+
+        const res = await fetch("/api/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamName: team, answers }),
+        });
+
+        if (res.ok) {
+          localStorage.clear(); // Simpler cleanup for nested IDs
+          hideModal("confirm-modal");
+          showModal("success-modal");
+        }
+      }
+
+      function openPreview() {
+        let html =
+          '<div style="text-align: left; max-height: 400px; overflow-y: auto;">';
+
+        questions.forEach((q, i) => {
+          html += `<div style="margin-bottom: 15px; border-bottom: 1px solid #30363d; padding-bottom: 10px;">`;
+          html += `<b style="color: var(--blue);">Problem ${i + 1}:</b> `;
+
+          if (q.type === "file-analysis" && q.subQuestions) {
+            // Handle nested sub-questions for the preview
+            html += `<ul style="margin: 5px 0; padding-left: 20px; list-style: none;">`;
+            q.subQuestions.forEach((sq) => {
+              const storageId = `${q.id}_${sq.id}`;
+              let val = "";
+              if (sq.type === "mcq") {
+                val = document.querySelector(
+                  `input[name="${storageId}"]:checked`,
+                )?.value;
+              } else {
+                val = document.getElementById(storageId)?.value;
+              }
+              html += `<li style="font-size: 0.9em; margin-top: 5px;">
+                            <i style="color: #8b949e;">${sq.text}:</i> <br>
+                            <span style="color: #aff5b4;">${val || "⚠️ Unanswered"}</span>
+                         </li>`;
+            });
+            html += `</ul>`;
+          } else {
+            // Handle standard questions
+            let val = "";
+            if (q.type === "mcq") {
+              val = document.querySelector(
+                `input[name="${q.id}"]:checked`,
+              )?.value;
+            } else {
+              val = document.getElementById(q.id)?.value;
+            }
+            html += `<span style="color: #aff5b4;">${val || "⚠️ Unanswered"}</span>`;
+          }
+          html += `</div>`;
+        });
+
+        html += "</div>";
+        document.getElementById("preview-content").innerHTML = html;
+        showModal("preview-modal");
+      }
+
+      async function login() {
+        const inputName = document.getElementById("teamName").value.trim();
+        if (!inputName) return;
+        const res = await fetch("/api/validate-team", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamName: inputName }),
+        });
+        if (res.ok) {
+          team = inputName;
+          socket = io();
+          socket.on("connect", () => socket.emit("join-contest", team));
+          document.getElementById("login-overlay").style.display = "none";
+          document.getElementById("workspace").style.display = "flex";
+          document.getElementById("active-team").innerText =
+            "TEAM: " + team.toUpperCase();
+          initContest();
+        } else {
+          const data = await res.json();
+          document.getElementById("error-msg").innerText = data.error;
+        }
+      }
+
+      function showModal(id) {
+        document.getElementById(id).style.display = "flex";
+      }
+      function hideModal(id) {
+        document.getElementById(id).style.display = "none";
+      }
+    </script>
+  </body>
+</html>

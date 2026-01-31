@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Admin Dashboard | Contest Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --card: #161b22;
+        --blue: #58a6ff;
+        --border: #30363d;
+        --text: #c9d1d9;
+        --green: #238636;
+        --red: #f85149;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, sans-serif;
+        padding: 40px;
+        margin: 0;
+      }
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+      .header-actions {
+        display: flex;
+        gap: 10px;
+      }
+      .controls {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        margin-bottom: 20px;
+        background: var(--card);
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+      }
+      .search-input {
+        padding: 10px 15px;
+        background: #010409;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: white;
+        flex-grow: 1;
+        outline: none;
+      }
+      .view-btn {
+        background: #21262d;
+        color: var(--text);
+        border: 1px solid var(--border);
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+      }
+      .view-btn.active {
+        background: var(--blue);
+        color: var(--bg);
+        border-color: var(--blue);
+      }
+      #table-view,
+      #chart-view {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        padding: 20px;
+        margin-top: 10px;
+      }
+      #chart-view {
+        display: none;
+        position: relative;
+      }
+      /* Fullscreen Specific Styles */
+      #chart-container {
+        width: 100%;
+        height: 500px;
+        position: relative;
+      }
+      #chart-container:fullscreen {
+        width: 100vw !important;
+        height: 100vh !important;
+        background: var(--bg) !important;
+        padding: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .fullscreen-icon {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        cursor: pointer;
+        z-index: 10;
+        padding: 8px;
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 6px;
+        transition: 0.2s;
+      }
+      .fullscreen-icon:hover {
+        background: rgba(0, 0, 0, 0.8);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        background: #21262d;
+        padding: 15px;
+        text-align: left;
+        color: var(--blue);
+        border-bottom: 1px solid var(--border);
+      }
+      td {
+        padding: 15px;
+        border-bottom: 1px solid var(--border);
+      }
+      tr:hover {
+        background: #1c2128;
+      }
+      .btn-refresh {
+        background: var(--green);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      .btn-logout {
+        background: transparent;
+        color: var(--red);
+        border: 1px solid var(--red);
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: 0.2s;
+      }
+      .btn-logout:hover {
+        background: var(--red);
+        color: white;
+      }
+      .score-badge {
+        color: var(--green);
+        font-weight: bold;
+        font-family: monospace;
+        font-size: 1.1em;
+      }
+      .timestamp {
+        font-size: 12px;
+        color: #8b949e;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Admin Control Panel</h1>
+        <div class="header-actions">
+          <button class="btn-refresh" onclick="loadData()">Refresh Data</button>
+          <button class="btn-logout" onclick="logout()">Logout</button>
+        </div>
+      </div>
+
+      <div class="header" style="margin-top: 30px">
+        <h3>Live Server Health</h3>
+      </div>
+      <div class="controls" id="status-panel" style="display: grid; grid-template-columns: repeat(3, 1fr); text-align: center;">
+        <div>
+          <div style="font-size: 12px; color: var(--blue)">ACTIVE SESSIONS</div>
+          <div id="stat-active" style="font-size: 24px; font-weight: bold">0</div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: var(--green)">TOTAL REQUESTS</div>
+          <div id="stat-reqs" style="font-size: 24px; font-weight: bold">0</div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: var(--red)">THROTTLED IPS</div>
+          <div id="stat-blocked" style="font-size: 24px; font-weight: bold">-</div>
+        </div>
+      </div>
+
+      <div class="controls" style="flex-direction: column; align-items: flex-start; gap: 20px">
+        <div style="display: flex; gap: 15px; width: 100%">
+          <div style="flex: 1; border: 1px dashed var(--border); padding: 15px; border-radius: 8px;">
+            <label style="display: block; margin-bottom: 10px; font-size: 12px; color: var(--blue);">UPLOAD QUESTIONS.JSON</label>
+            <input type="file" id="qFile" accept=".json" onchange="handleUpload('questions.json', 'qFile')" />
+          </div>
+          <div style="flex: 1; border: 1px dashed var(--border); padding: 15px; border-radius: 8px;">
+            <label style="display: block; margin-bottom: 10px; font-size: 12px; color: var(--red);">UPLOAD ANSWERS.JSON</label>
+            <input type="file" id="aFile" accept=".json" onchange="handleUpload('answers.json', 'aFile')" />
+          </div>
+        </div>
+        <button class="btn-refresh" onclick="refreshConfig()" style="background: var(--blue)">Manual Sync S3 to Memory</button>
+      </div>
+
+      <div class="controls">
+        <div style="display: flex; gap: 5px">
+          <button id="btn-table" class="view-btn active" onclick="switchView('table')">Leaderboard</button>
+          <button id="btn-chart" class="view-btn" onclick="switchView('chart')">Performance</button>
+        </div>
+        <input type="text" id="teamSearch" class="search-input" placeholder="Search team..." onkeyup="filterData()" />
+      </div>
+
+      <div id="table-view">
+        <table>
+          <thead>
+            <tr>
+              <th>Team Name</th>
+              <th>Score</th>
+              <th>Submitted At</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+
+      <div id="chart-view">
+        <div id="chart-container">
+          <div class="fullscreen-icon" onclick="toggleFullScreen()" title="Toggle Fullscreen">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+            </svg>
+          </div>
+          <canvas id="scoreChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let allSubmissions = [];
+      let myChart = null;
+
+      async function logout() {
+        await fetch("/api/admin/logout", { method: "POST" });
+        window.location.href = "/admin";
+      }
+
+      async function handleUpload(filename, inputId) {
+        const file = document.getElementById(inputId).files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const content = JSON.parse(e.target.result);
+            const res = await fetch("/api/admin/upload-config", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ filename, content }),
+            });
+            const result = await res.json();
+            alert(result.message || result.error);
+          } catch (err) {
+            alert("Invalid JSON file structure");
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      async function refreshConfig() {
+        const res = await fetch("/api/admin/refresh-config", { method: "POST" });
+        const data = await res.json();
+        alert("Success! " + data.questions + " questions now in memory.");
+      }
+
+      async function loadData() {
+        try {
+          const res = await fetch("/api/admin/submissions");
+          if (res.status === 401) window.location.href = "/admin";
+          allSubmissions = await res.json();
+          renderTable(allSubmissions);
+          // If the chart is currently visible, update it live
+          if (document.getElementById("chart-view").style.display === "block") {
+            renderChart(allSubmissions);
+          }
+        } catch (e) {
+          console.error("Data load failed", e);
+        }
+      }
+
+      function renderTable(data) {
+        const tbody = document.getElementById("table-body");
+        tbody.innerHTML = data
+          .map((sub) => `
+          <tr>
+            <td style="font-weight:bold; color:white;">${sub.teamName.toUpperCase()}</td>
+            <td><span class="score-badge">${sub.score}</span></td>
+            <td><span class="timestamp">${new Date(sub.submittedAt).toLocaleString()}</span></td>
+          </tr>
+        `).join("");
+      }
+
+      function filterData() {
+        const term = document.getElementById("teamSearch").value.toUpperCase();
+        const filtered = allSubmissions.filter(s => s.teamName.toUpperCase().includes(term));
+        renderTable(filtered);
+      }
+
+      function renderChart(data) {
+        const canvas = document.getElementById("scoreChart");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (myChart) myChart.destroy();
+        if (!data || data.length === 0) return;
+
+        const teams = {};
+        data.forEach((sub) => {
+          const team = sub.teamName.toUpperCase();
+          if (!teams[team]) teams[team] = [];
+          const timestamp = new Date(sub.submittedAt).getTime();
+          teams[team].push({ x: timestamp, y: sub.score || 0 });
+        });
+
+        const colors = ["#FF5733", "#33FF57", "#3357FF", "#F333FF", "#FF33A1", "#33FFF6", "#F6FF33"];
+
+        const datasets = Object.keys(teams).map((teamName, index) => ({
+          label: teamName,
+          data: teams[teamName].sort((a, b) => a.x - b.x),
+          borderColor: colors[index % colors.length],
+          backgroundColor: colors[index % colors.length],
+          borderWidth: 3,
+          stepped: true,
+          pointRadius: 5,
+          pointHoverRadius: 8
+        }));
+
+        myChart = new Chart(ctx, {
+          type: "line",
+          data: { datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: false },
+            scales: {
+              x: {
+                type: "linear",
+                grid: { color: "#21262d" },
+                ticks: {
+                  color: "#8b949e",
+                  callback: (val) => new Date(val).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }
+              },
+              y: {
+                beginAtZero: true,
+                grid: { color: "#21262d" },
+                ticks: { color: "#8b949e" }
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'top',
+                labels: { color: "#c9d1d9", padding: 20, usePointStyle: true }
+              },
+              tooltip: {
+                enabled: true,
+                backgroundColor: "#161b22",
+                borderColor: "#30363d",
+                borderWidth: 1,
+                displayColors: true,
+                callbacks: {
+                  title: () => "", 
+                  label: (context) => ` ${context.dataset.label}: ${context.parsed.y} points`
+                }
+              }
+            }
+          }
+        });
+      }
+
+      function switchView(view) {
+        document.getElementById("table-view").style.display = view === "table" ? "block" : "none";
+        document.getElementById("chart-view").style.display = view === "chart" ? "block" : "none";
+        document.getElementById("btn-table").classList.toggle("active", view === "table");
+        document.getElementById("btn-chart").classList.toggle("active", view === "chart");
+
+        if (view === "chart") renderChart(allSubmissions);
+      }
+
+      function toggleFullScreen() {
+        const container = document.getElementById('chart-container');
+        if (!document.fullscreenElement) {
+          if (container.requestFullscreen) container.requestFullscreen();
+          else if (container.webkitRequestFullscreen) container.webkitRequestFullscreen();
+        } else {
+          if (document.exitFullscreen) document.exitFullscreen();
+        }
+      }
+
+      document.addEventListener('fullscreenchange', () => { if (myChart) myChart.resize(); });
+
+      async function updateStats() {
+        try {
+          const res = await fetch("/api/admin/server-stats");
+          const text = await res.text();
+          const activeMatch = text.match(/Active connections: (\d+)/);
+          const reqsMatch = text.match(/\s+(\d+)\s+(\d+)\s+(\d+)/);
+          if (activeMatch) document.getElementById("stat-active").innerText = activeMatch[1];
+          if (reqsMatch) document.getElementById("stat-reqs").innerText = reqsMatch[3];
+        } catch (e) { console.log("Stats fetch failed"); }
+      }
+
+      setInterval(updateStats, 5000);
+      setInterval(loadData, 30000);
+      loadData();
+    </script>
+  </body>
+</html>
