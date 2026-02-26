@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # 1. Configuration
-REPO_URL="https://github.com/Name-X/BattleBox.git"
-BRANCH_NAME="varun/contestApp"
+REPO_URL="https://github.com/Shivamdhar/BattleBox"
+BRANCH_NAME="main"
 APP_ROOT="/home/ubuntu/app"
 SUB_FOLDER="contest-app"
 IMAGE_NAME="contest-app"

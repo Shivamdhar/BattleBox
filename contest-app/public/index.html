@@ -15,6 +15,7 @@
         --red: #f85149;
         --sidebar: #010409;
       }
+
       body {
         background: var(--bg);
         color: var(--text);
@@ -37,6 +38,7 @@
         height: 100vh;
         flex-direction: column;
       }
+
       #login-overlay {
         position: fixed;
         inset: 0;
@@ -46,6 +48,7 @@
         justify-content: center;
         z-index: 1000;
       }
+
       .login-card {
         background: var(--card);
         border: 1px solid var(--border);
@@ -65,6 +68,7 @@
         background: var(--card);
         z-index: 10;
       }
+
       .main {
         display: flex;
         height: calc(100vh - 60px);
@@ -79,6 +83,7 @@
         align-items: center;
         padding-top: 20px;
       }
+
       .q-tab {
         width: 50px;
         height: 50px;
@@ -94,6 +99,7 @@
         transition: 0.2s;
         color: #8b949e;
       }
+
       .q-tab:hover {
         border-color: var(--blue);
       }
@@ -109,6 +115,7 @@
         display: flex;
         overflow: hidden;
       }
+
       .pane-desc {
         width: 45%;
         padding: 30px;
@@ -116,6 +123,7 @@
         border-right: 1px solid var(--border);
         background: var(--bg);
       }
+
       .pane-input {
         width: 55%;
         padding: 30px;
@@ -128,6 +136,7 @@
         height: 100%;
         width: 100%;
       }
+
       .q-panel.active {
         display: flex;
       }
@@ -140,12 +149,14 @@
         margin-top: 15px;
         background: #010409;
       }
+
       .file-tabs {
         display: flex;
         background: #161b22;
         border-bottom: 1px solid var(--border);
         overflow-x: auto;
       }
+
       .file-link {
         padding: 10px 15px;
         cursor: pointer;
@@ -155,6 +166,7 @@
         transition: 0.2s;
         white-space: nowrap;
       }
+
       .file-link:hover {
         background: #1c2128;
         color: var(--text);
@@ -164,15 +176,55 @@
         color: var(--blue);
         border-bottom: 2px solid var(--blue);
       }
+
+      /* Compact Code Viewer Styling */
       .file-viewer {
-        padding: 15px;
-        height: 300px;
+        padding: 0; /* Remove top/bottom padding for precise line sync */
+        height: 350px;
         overflow-y: auto;
+        background: #010409;
+      }
+
+      .code-line-wrapper {
+        display: flex;
+        transition: background 0.1s;
+        line-height: 1.5; /* Tight spacing like VS Code */
+        min-height: 1.5em;
+        align-items: stretch;
+      }
+
+      .code-line-wrapper:hover {
+        background: rgba(88, 166, 255, 0.1);
+      }
+
+      .code-line-wrapper:hover .line-num {
+        color: var(--blue);
+      }
+
+      .line-num {
+        padding: 0 10px;
+        background: #0d1117;
+        border-right: 1px solid var(--border);
+        color: #484f58;
+        text-align: right;
+        min-width: 35px;
+        user-select: none;
         font-family: "Fira Code", monospace;
         font-size: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+      }
+
+      .line-text {
+        padding: 0 15px;
         color: #d1d5da;
         white-space: pre;
-        line-height: 1.5;
+        font-family: "Fira Code", monospace;
+        font-size: 13px;
+        flex: 1;
+        display: flex;
+        align-items: center;
       }
 
       .mcq-option {
@@ -185,10 +237,12 @@
         cursor: pointer;
         transition: 0.2s;
       }
+
       .mcq-option:hover {
         border-color: var(--blue);
         background: #1c2128;
       }
+
       textarea {
         width: 100%;
         height: 400px;
@@ -210,10 +264,12 @@
         font-weight: bold;
         cursor: pointer;
       }
+
       .btn-green {
         background: var(--green);
         color: white;
       }
+
       .modal-overlay {
         position: fixed;
         inset: 0;
@@ -223,6 +279,7 @@
         justify-content: center;
         z-index: 2000;
       }
+
       .modal-card {
         background: var(--card);
         border: 1px solid var(--border);
@@ -455,19 +512,34 @@
           .map(
             (name, i) => `
         <div class="file-link ${i === 0 ? "active" : ""}" 
-             style="display: flex; align-items: center; gap: 8px; padding: 8px 15px; font-size: 13px; border-right: 1px solid var(--bg);"
              onclick="openFile('${q.id}', '${name}', this)">
             <span style="color: #e3b341;">JS</span> ${name}
+        </div>`,
+          )
+          .join("");
+
+        const firstFileContent = q.files[fileNames[0]].trim();
+        const lines = firstFileContent.split(/\r?\n/);
+
+        // Create the line-by-line HTML
+        const codeHtml = lines
+          .map(
+            (line, i) => `
+        <div class="code-line-wrapper">
+            <div class="line-num">${i + 1}</div>
+            <div class="line-text">${line || " "}</div>
         </div>
     `,
           )
           .join("");
 
         return `
-        <div class="file-explorer" style="border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #010409;">
-            <div class="file-tabs" style="background: #161b22; display: flex; border-bottom: 1px solid var(--border);">${tabHtml}</div>
-            <pre class="file-viewer" id="viewer-${q.id}" 
-                 style="margin: 0; padding: 20px; color: #d1d5db; font-family: 'Fira Code', monospace; font-size: 14px; line-height: 1.6; overflow-x: auto; min-height: 200px;">${q.files[fileNames[0]]}</pre>
+        <div class="file-explorer">
+            <div class="file-tabs">${tabHtml}</div>
+            <div class="file-viewer" id="viewer-${q.id}" 
+                 style="padding: 10px 0; height: 350px; overflow-y: auto; background: #010409;">
+                ${codeHtml}
+            </div>
         </div>`;
       }
 
@@ -477,9 +549,24 @@
           .querySelectorAll(".file-link")
           .forEach((l) => l.classList.remove("active"));
         el.classList.add("active");
+
         const questionData = questions.find((q) => q.id === qId);
-        document.getElementById(`viewer-${qId}`).textContent =
-          questionData.files[fileName];
+        const content = questionData.files[fileName].trim();
+        const lines = content.split(/\r?\n/);
+
+        // Re-generate the wrapped line HTML
+        const codeHtml = lines
+          .map(
+            (line, i) => `
+        <div class="code-line-wrapper">
+            <div class="line-num">${i + 1}</div>
+            <div class="line-text">${line || " "}</div>
+        </div>
+    `,
+          )
+          .join("");
+
+        document.getElementById(`viewer-${qId}`).innerHTML = codeHtml;
       }
 
       function switchTab(qNum) {
