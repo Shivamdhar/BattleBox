@@ -602,10 +602,10 @@
 
         if (data.correct) {
           feedbackEl.style.color = "var(--green)";
-          feedbackEl.innerText = "✓ Correct!";
+          feedbackEl.innerText = "✅ Correct!";
         } else {
           feedbackEl.style.color = "var(--red)";
-          feedbackEl.innerText = `✗ Wrong. Answer: ${data.solution || "Incorrect"}`;
+          feedbackEl.innerText = `❌  Wrong. ✅Answer: ${data.solution || "Incorrect"}`;
         }
 
         // Lock the input

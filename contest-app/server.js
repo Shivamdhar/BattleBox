@@ -32,7 +32,6 @@ const PORT = 3000;
 const CONTEST_MODE = process.env.CONTEST_MODE || 'batch';
 const BUCKET_NAME = process.env.BUCKET_NAME || "my-contest-data-2026";
 
-console.log(CONTEST_MODE, process.env);
 // Isolate DB file per mode to prevent collision
 const dbFile = path.join(__dirname, 'data', `contest_${CONTEST_MODE}.db`);
 const db = new sqlite3.Database(dbFile);
