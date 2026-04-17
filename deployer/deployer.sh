@@ -1,14 +1,39 @@
 #!/bin/bash
 
+
+# 0. Arguments
+MODE=$1  # Accept 'batch' or 'fastTrack'
+if [[ "$MODE" != "batch" && "$MODE" != "fastTrack" ]]; then
+    echo "❌ Usage: ./deployer.sh [batch|fastTrack]"
+    exit 1
+fi
+
 # 1. Configuration
 REPO_URL="https://github.com/Shivamdhar/BattleBox"
 BRANCH_NAME="main"
-APP_ROOT="/home/ubuntu/app"
+APP_ROOT="/home/ubuntu/app_$MODE"
 SUB_FOLDER="contest-app"
-IMAGE_NAME="contest-app"
+IMAGE_NAME="contest-app-$MODE"
 BUCKET_NAME="my-contest-data-2026" 
+NGINX_PORT=80
 
-echo "🚀 Starting Deployment..."
+# Mode-Specific Settings
+if [ "$MODE" == "batch" ]; then
+    REPO_URL="https://github.com/Shivamdhar/BattleBox"
+    BRANCH_NAME="main"
+    PORT=3000
+    NGINX_PORT=80
+    BUCKET_NAME="my-contest-batch-2026"
+else
+    REPO_URL="https://github.com/Name-X/BattleBox"
+    BRANCH_NAME="nameX/fastTrack"
+    PORT=3001
+    NGINX_PORT=81
+    BUCKET_NAME="my-contest-fasttrack-2026"
+fi
+
+
+echo "🚀 Starting Deployment for [$MODE] on Port $NGINX_PORT..."
 
 # 2. Clean and Clone
 if [ -d "$APP_ROOT/temp_repo" ]; then sudo rm -rf $APP_ROOT/temp_repo; fi
@@ -17,17 +42,15 @@ mkdir -p $APP_ROOT/data
 echo "📂 Cloning repository and switching to $BRANCH_NAME..."
 git clone -b $BRANCH_NAME $REPO_URL $APP_ROOT/temp_repo
 
-# 3. UPLOAD JSON FILES TO S3
-echo "📤 Preparing S3 Upload..."
-cd $APP_ROOT/temp_repo/$SUB_FOLDER || { echo "❌ Error: Folder $SUB_FOLDER not found"; exit 1; }
+# 3. S3 Configuration Upload
+echo "📤 Syncing $MODE Config to S3..."
+cd $APP_ROOT/temp_repo/$SUB_FOLDER || exit 1
 
 if [ -f "questions.json" ] && [ -f "answers.json" ]; then
-    echo "🚀 Uploading to s3://$BUCKET_NAME..."
     aws s3 cp questions.json s3://$BUCKET_NAME/questions.json
     aws s3 cp answers.json s3://$BUCKET_NAME/answers.json
-    echo "✅ S3 Sync Successful."
 else
-    echo "⚠️ Warning: JSON files not found. Skipping S3 upload."
+    echo "⚠️ JSON files missing in repo. Using existing S3 config."
 fi
 
 # 4. Move code and Cleanup
@@ -39,24 +62,24 @@ sudo rm -rf $APP_ROOT/temp_repo
 sudo chmod 666 /var/run/docker.sock
 
 # 5. SECURITY LAYER: Updated for Browser Compatibility
-echo "🛡️ Configuring Nginx Shield..."
-cat <<EOF > $APP_ROOT/nginx-contest.conf
+echo "🛡️ Configuring Nginx Shield for $MODE..."
+cat <<EOF > $APP_ROOT/nginx-$MODE.conf
 events { worker_connections 1024; }
 
 http {
     # limit_req is better for browsers than limit_conn
     # rate=10r/s allows 10 requests per second per IP
-    limit_req_zone \$binary_remote_addr zone=contest_limit:10m rate=10r/s;
+    limit_req_zone \$binary_remote_addr zone=contest_limit_$MODE:10m rate=15r/s;
 
     server {
-        listen 80;
+        listen $NGINX_PORT;
 
         location / {
             # burst=20: Allows a user to load many files (CSS/JS) at once
             # nodelay: Ensures the page feels fast for real users
-            limit_req zone=contest_limit burst=20 nodelay;
+            limit_req zone=contest_limit_$MODE burst=30 nodelay;
 
-            proxy_pass http://contest-app:3000;
+            proxy_pass http://contest-app-$MODE:3000;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -75,22 +98,24 @@ http {
 }
 EOF
 
-# 6. DOCKER DEPLOYMENT
-echo "🧹 Cleaning up old containers..."
-docker stop nginx-shield contest-app || true
-docker rm nginx-shield contest-app || true
+# 6. Docker Deployment with Environment Injection
+echo "🧹 Cleaning up old containers for $MODE..."
+docker stop nginx-shield-$MODE contest-app-$MODE || true
+docker rm nginx-shield-$MODE contest-app-$MODE || true
 
 # Ensure the network exists without deleting it (prevents 'No route to host')
-docker network create contest-net || true
+docker network create contest-net-$MODE || true
 
-echo "🛠️ Building and Launching App..."
+echo "🛠️ Building $IMAGE_NAME.. and Launching App..."
 cd $APP_ROOT/$SUB_FOLDER
 docker build -t $IMAGE_NAME .
 
 docker run -d \
-  --name contest-app \
-  --network contest-net \
+  --name contest-app-$MODE \
+  --network contest-net-$MODE \
   --restart unless-stopped \
+  -e CONTEST_MODE=$MODE \
+  -e BUCKET_NAME=$BUCKET_NAME \
   -v $APP_ROOT/data:/usr/src/app/data \
   $IMAGE_NAME
 
@@ -98,13 +123,13 @@ docker run -d \
 echo "⏳ Waiting for app network to stabilize..."
 sleep 5
 
-echo "🚀 Launching Nginx Shield..."
+echo "🚀 Launching Nginx Shield for $MODE..."
 docker run -d \
-  --name nginx-shield \
-  --network contest-net \
-  -p 80:80 \
-  -v $APP_ROOT/nginx-contest.conf:/etc/nginx/nginx.conf:ro \
+  --name nginx-shield-$MODE \
+  --network contest-net-$MODE \
+  -p $NGINX_PORT:$NGINX_PORT \
+  -v $APP_ROOT/nginx-$MODE.conf:/etc/nginx/nginx.conf:ro \
   --restart unless-stopped \
   nginx:latest
 
-echo "✅ Deployment Complete!"
+echo "✅ $MODE Deployment Complete! Access via port $NGINX_PORT"

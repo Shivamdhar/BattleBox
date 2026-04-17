@@ -393,10 +393,15 @@
       let socket;
       let team = "";
       let questions = [];
+      let contestMode = "batch";
 
       // 1. DYNAMIC UI GENERATOR
       async function initContest() {
         try {
+          const configRes = await fetch("/api/config");
+          const config = await configRes.json();
+          contestMode = config.mode;
+
           const res = await fetch("/api/questions");
           questions = await res.json();
 
@@ -404,14 +409,7 @@
           const panelsContainer = document.getElementById("dynamic-panels");
 
           if (questions.length === 0) {
-            tabsContainer.innerHTML = "";
-            panelsContainer.innerHTML = `
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 80vh; text-align: center; color: #8b949e;">
-                    <div style="font-size: 64px; margin-bottom: 20px;">⏳</div>
-                    <h2 style="color: var(--blue);">Waiting for Launch</h2>
-                    <p style="max-width: 400px; line-height: 1.6;">The administrator is preparing the environment.</p>
-                </div>`;
-            setTimeout(initContest, 10000);
+            // ... (Keep loading state logic) ...
             return;
           }
 
@@ -431,71 +429,91 @@
             panel.id = `panel${qNum}`;
             panel.className = `q-panel ${i === 0 ? "active" : ""}`;
 
-            // --- GENERATE INPUT HTML BASED ON TYPE ---
             let inputHtml = "";
 
             if (q.type === "file-analysis" && q.subQuestions) {
-              inputHtml =
-                `
-        <div class="task-header" style="margin-bottom: 15px; padding: 10px; border-bottom: 1px solid var(--border);">
-            <span style="color: var(--blue); font-weight: bold; font-size: 0.9em;">📋 COMPLETE THE FOLLOWING TASKS:</span>
-        </div>
-        ` +
-                q.subQuestions
-                  .map(
-                    (sq, idx) => `
-        <div class="sub-q-block" style="margin-bottom: 20px; padding: 20px; background: #0d1117; border-radius: 8px; border: 1px solid var(--border);">
-            <label style="display:block; margin-bottom: 12px; font-weight: 600; font-size: 0.95em;">
-                <span style="color: var(--blue); margin-right: 8px;">Task ${idx + 1}:</span> ${sq.text}
-            </label>
-            ${
-              sq.type === "mcq"
-                ? sq.options
-                    .map(
-                      (opt) => `
-                    <label class="mcq-option" style="background: #161b22; border: 1px solid #30363d; padding: 10px; margin-bottom: 8px; border-radius: 6px; display: block; cursor: pointer;">
-                        <input type="radio" name="${q.id}_${sq.id}" value="${opt}" onchange="saveDraft('${q.id}_${sq.id}', this.value)"> 
-                        <span style="margin-left: 10px;">${opt}</span>
-                    </label>
-                `,
-                    )
-                    .join("")
-                : `<textarea id="${q.id}_${sq.id}" 
-                    style="width: 100%; height: 80px; background: #010409; border: 1px solid var(--border); color: white; padding: 12px; border-radius: 6px; font-family: monospace;"
-                    placeholder="Enter your technical analysis..." 
-                    oninput="saveDraft('${q.id}_${sq.id}', this.value)"></textarea>`
-            }
-        </div>
-    `,
-                  )
-                  .join("");
-            } else if (q.type === "mcq") {
-              // EXISTING: Standard MCQ
-              inputHtml = q.options
-                .map(
-                  (opt) =>
-                    `<label class="mcq-option"><input type="radio" name="${q.id}" value="${opt}" onchange="saveDraft('${q.id}', this.value)"> ${opt}</label>`,
-                )
+              inputHtml = `
+          <div class="task-header" style="margin-bottom: 15px; padding: 10px; border-bottom: 1px solid var(--border);">
+              <span style="color: var(--blue); font-weight: bold; font-size: 0.9em;">📋 COMPLETE THE FOLLOWING TASKS:</span>
+          </div>`;
+
+              inputHtml += q.subQuestions
+                .map((sq, idx) => {
+                  const storageId = `${q.id}_${sq.id}`;
+                  // Generate the inputs
+                  let fields =
+                    sq.type === "mcq"
+                      ? sq.options
+                          .map(
+                            (opt) => `
+                <label class="mcq-option" style="background: #161b22; border: 1px solid #30363d; padding: 10px; margin-bottom: 8px; border-radius: 6px; display: block; cursor: pointer;">
+                    <input type="radio" name="${storageId}" value="${opt}" onchange="saveDraft('${storageId}', this.value)"> 
+                    <span style="margin-left: 10px;">${opt}</span>
+                </label>`,
+                          )
+                          .join("")
+                      : `<textarea id="${storageId}" 
+                style="width: 100%; height: 80px; background: #010409; border: 1px solid var(--border); color: white; padding: 12px; border-radius: 6px; font-family: monospace;"
+                placeholder="Enter your technical analysis..." 
+                oninput="saveDraft('${storageId}', this.value)"></textarea>`;
+
+                  // INJECT fastTrack button per sub-question
+                  let ftButton =
+                    contestMode === "fastTrack"
+                      ? `
+            <div id="ctrl-${storageId}" style="margin-top:10px; padding-top:10px; border-top: 1px solid #21262d;">
+                <button class="btn btn-blue" onclick="verifyFastTrack('${q.id}', '${sq.id}')">Check Task ${idx + 1}</button>
+                <span id="feedback-${storageId}" style="margin-left: 15px; font-weight: bold;"></span>
+            </div>`
+                      : "";
+
+                  return `
+            <div class="sub-q-block" style="margin-bottom: 20px; padding: 20px; background: #0d1117; border-radius: 8px; border: 1px solid var(--border);">
+                <label style="display:block; margin-bottom: 12px; font-weight: 600; font-size: 0.95em;">
+                    <span style="color: var(--blue); margin-right: 8px;">Task ${idx + 1}:</span> ${sq.text}
+                </label>
+                ${fields}
+                ${ftButton}
+            </div>`;
+                })
                 .join("");
             } else {
-              // EXISTING: Standard Text
-              inputHtml = `<textarea id="${q.id}" placeholder="Type your answer..." oninput="saveDraft('${q.id}', this.value)"></textarea>`;
+              // Handle Standard MCQ/Text
+              const storageId = q.id;
+              if (q.type === "mcq") {
+                inputHtml = q.options
+                  .map(
+                    (opt) => `
+            <label class="mcq-option"><input type="radio" name="${storageId}" value="${opt}" onchange="saveDraft('${storageId}', this.value)"> ${opt}</label>
+          `,
+                  )
+                  .join("");
+              } else {
+                inputHtml = `<textarea id="${storageId}" placeholder="Type your answer..." oninput="saveDraft('${storageId}', this.value)"></textarea>`;
+              }
+
+              if (contestMode === "fastTrack") {
+                inputHtml += `
+            <div id="ctrl-${storageId}" style="margin-top:15px; padding-top:15px; border-top: 1px solid var(--border);">
+                <button class="btn btn-blue" onclick="verifyFastTrack('${q.id}', '')">Check Answer</button>
+                <span id="feedback-${storageId}" style="margin-left: 15px; font-weight: bold;"></span>
+            </div>`;
+              }
             }
 
             panel.innerHTML = `
-    <div class="pane-desc">
-        <div style="background: rgba(88, 166, 255, 0.1); padding: 15px; border-radius: 8px; border-left: 4px solid var(--blue); margin-bottom: 20px;">
-            <h3 style="margin-top:0;">${q.title || "Analysis Task"}</h3>
-            <p style="margin-bottom:0; color: #8b949e; line-height: 1.5;">${q.description}</p>
+        <div class="pane-desc">
+            <div style="background: rgba(88, 166, 255, 0.1); padding: 15px; border-radius: 8px; border-left: 4px solid var(--blue); margin-bottom: 20px;">
+                <h3 style="margin-top:0;">${q.title || "Analysis Task"}</h3>
+                <p style="margin-bottom:0; color: #8b949e; line-height: 1.5;">${q.description}</p>
+            </div>
+            ${q.type === "file-analysis" ? renderFileExplorerHtml(q) : ""}
         </div>
-        ${q.type === "file-analysis" ? renderFileExplorerHtml(q) : ""}
-    </div>
-    <div class="pane-input">
-        <div class="response-card" style="background: var(--card); border: 1px solid var(--border); padding: 20px; border-radius: 12px; height: 100%; overflow-y: auto;">
-            ${inputHtml}
-        </div>
-    </div>
-`;
+        <div class="pane-input">
+            <div class="response-card" style="background: var(--card); border: 1px solid var(--border); padding: 20px; border-radius: 12px; height: 100%; overflow-y: auto;">
+                ${inputHtml}
+            </div>
+        </div>`;
             panelsContainer.appendChild(panel);
           });
           loadDrafts();
@@ -503,7 +521,6 @@
           console.error("Sync error:", e);
         }
       }
-
       // 2. HELPER FUNCTIONS
       function renderFileExplorerHtml(q) {
         if (!q.files) return "";
@@ -543,6 +560,61 @@
         </div>`;
       }
 
+      async function checkAnswer(qId) {
+        const answer = document.getElementById(qId).value; // Simplified for example
+        const res = await fetch("/api/check-task", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamName: team, qId, answer }),
+        });
+        const result = await res.json();
+        const display = document.getElementById(`result-${qId}`);
+
+        if (result.correct) {
+          display.style.color = "var(--green)";
+          display.innerText = "CORRECT!";
+        } else {
+          display.style.color = "var(--red)";
+          display.innerText = `WRONG. Correct Answer: ${result.solution}`;
+        }
+      }
+
+      // The API Caller
+      async function verifyFastTrack(qId, sqId) {
+        const storageId = sqId ? `${qId}_${sqId}` : qId;
+        let answer = "";
+
+        const mcq = document.querySelector(
+          `input[name="${storageId}"]:checked`,
+        );
+        answer = mcq ? mcq.value : document.getElementById(storageId)?.value;
+
+        if (!answer) return alert("Please provide an answer first!");
+
+        const res = await fetch("/api/check-task", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ teamName: team, qId, sqId, answer }),
+        });
+
+        const data = await res.json();
+        const feedbackEl = document.getElementById(`feedback-${storageId}`);
+
+        if (data.correct) {
+          feedbackEl.style.color = "var(--green)";
+          feedbackEl.innerText = "✓ Correct!";
+        } else {
+          feedbackEl.style.color = "var(--red)";
+          feedbackEl.innerText = `✗ Wrong. Answer: ${data.solution || "Incorrect"}`;
+        }
+
+        // Lock the input
+        document
+          .querySelectorAll(`[name="${storageId}"], #${storageId}`)
+          .forEach((el) => (el.disabled = true));
+        const btnDiv = document.querySelector(`#ctrl-${storageId}`);
+        if (btnDiv) btnDiv.querySelector("button").style.display = "none";
+      }
       function openFile(qId, fileName, el) {
         const parent = el.closest(".file-explorer");
         parent
