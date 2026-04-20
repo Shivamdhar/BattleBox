@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# 0. Arguments
+MODE=$1  # Accept 'batch' or 'fast-track'
+if [[ "$MODE" != "batch" && "$MODE" != "fast-track" ]]; then
+    echo "❌ Usage: ./deployer.sh [batch|fast-track]"
+    exit 1
+fi
+
+
 # 1. Configuration
 REPO_URL="https://github.com/Name-X/BattleBox.git"
 BRANCH_NAME="nameX/fastTrack"
@@ -31,7 +39,7 @@ echo "🚀 Starting Deployment for [$MODE] on Port $NGINX_PORT..."
 
 # 3. S3 Configuration Upload
 echo "📤 Syncing $MODE Config to S3..."
-cd $APP_ROOT/temp_repo/$SUB_FOLDER || exit 1
+cd $APP_ROOT/$SUB_FOLDER || exit 1
 
 if [ -f "questions.json" ] && [ -f "answers.json" ]; then
     aws s3 cp questions.json s3://$BUCKET_NAME/questions.json
@@ -40,46 +48,32 @@ else
     echo "⚠️ JSON files missing in repo. Using existing S3 config."
 fi
 
-# 4. Move code and Cleanup
-echo "📦 Finalizing file structure..."
-cp -r $APP_ROOT/temp_repo/$SUB_FOLDER $APP_ROOT/
-sudo rm -rf $APP_ROOT/temp_repo
-
 # Fix permissions for Docker socket immediately
 sudo chmod 666 /var/run/docker.sock
 
-# 5. SECURITY LAYER: Updated for Browser Compatibility
+
+# 5. Generate Mode-Specific Nginx Config
 echo "🛡️ Configuring Nginx Shield for $MODE..."
 cat <<EOF > $APP_ROOT/nginx-$MODE.conf
 events { worker_connections 1024; }
-
 http {
-    # limit_req is better for browsers than limit_conn
-    # rate=10r/s allows 10 requests per second per IP
+    # Docker's internal DNS server
+    resolver 127.0.0.11 valid=30s;
+
     limit_req_zone \$binary_remote_addr zone=contest_limit_$MODE:10m rate=15r/s;
 
     server {
         listen $NGINX_PORT;
 
-        location / {
-            # burst=20: Allows a user to load many files (CSS/JS) at once
-            # nodelay: Ensures the page feels fast for real users
-            limit_req zone=contest_limit_$MODE burst=30 nodelay;
+        # We use a variable here so Nginx doesn't fail if the container is slow to start
+        set \$upstream_endpoint http://contest-app-$MODE:3000;
 
-            proxy_pass http://contest-app-$MODE:3000;
+        location / {
+            limit_req zone=contest_limit_$MODE burst=30 nodelay;
+            proxy_pass \$upstream_endpoint;
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-            
-            proxy_connect_timeout 90;
-            proxy_send_timeout 90;
-            proxy_read_timeout 90;
-        }
-        location /nginx_status {
-            stub_status;
-            allow 172.18.0.0/16; # Allow the Docker network to see stats
-            allow 127.0.0.1;
-            deny all;
         }
     }
 }
@@ -95,7 +89,7 @@ docker network create contest-net-$MODE || true
 
 echo "🛠️ Building $IMAGE_NAME.. and Launching App..."
 cd $APP_ROOT/$SUB_FOLDER
-docker build -t $IMAGE_NAME .
+DOCKER_BUILDKIT=0 docker build -t $IMAGE_NAME .
 
 docker run -d \
   --name contest-app-$MODE \
