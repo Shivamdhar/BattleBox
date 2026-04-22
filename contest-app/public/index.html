@@ -462,7 +462,7 @@
                     contestMode === "fast-track"
                       ? `
             <div id="ctrl-${storageId}" style="margin-top:10px; padding-top:10px; border-top: 1px solid #21262d;">
-                <button class="btn btn-blue" onclick="verifyfast-track('${q.id}', '${sq.id}')">Check Task ${idx + 1}</button>
+                <button class="btn btn-blue" onclick="verifyfastTrack('${q.id}', '${sq.id}')">Check Task ${idx + 1}</button>
                 <span id="feedback-${storageId}" style="margin-left: 15px; font-weight: bold;"></span>
             </div>`
                       : "";
@@ -495,7 +495,7 @@
               if (contestMode === "fast-track") {
                 inputHtml += `
             <div id="ctrl-${storageId}" style="margin-top:15px; padding-top:15px; border-top: 1px solid var(--border);">
-                <button class="btn btn-blue" onclick="verifyfast-track('${q.id}', '')">Check Answer</button>
+                <button class="btn btn-blue" onclick="verifyfastTrack('${q.id}', '')">Check Answer</button>
                 <span id="feedback-${storageId}" style="margin-left: 15px; font-weight: bold;"></span>
             </div>`;
               }
@@ -580,7 +580,7 @@
       }
 
       // The API Caller
-      async function verifyfast-track(qId, sqId) {
+      async function verifyfastTrack(qId, sqId) {
         const storageId = sqId ? `${qId}_${sqId}` : qId;
         let answer = "";
 
