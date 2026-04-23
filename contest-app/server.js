@@ -29,9 +29,13 @@ const io = new Server(server, {
 });
 
 const PORT = 3000;
-const BUCKET_NAME = "my-contest-data-2026"; 
+const CONTEST_MODE = process.env.CONTEST_MODE || 'batch';
+const BUCKET_NAME = process.env.BUCKET_NAME || "my-contest-data-2026";
 
-const db = new sqlite3.Database('./data/contest.db');
+// Isolate DB file per mode to prevent collision
+const dbFile = path.join(__dirname, 'data', `contest_${CONTEST_MODE}.db`);
+const db = new sqlite3.Database(dbFile);
+
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS submissions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +43,14 @@ db.serialize(() => {
         answers TEXT,
         score INTEGER,
         submittedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+    db.run(`CREATE TABLE IF NOT EXISTS fasttrack_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        teamName TEXT,
+        questionId TEXT,
+        isCorrect INTEGER,
+        scoreAwarded INTEGER,
+        UNIQUE(teamName, questionId)
     )`);
 });
 
@@ -63,7 +75,7 @@ async function bootstrap() {
             const [uR, pR] = await Promise.all([ssmClient.send(userCmd), ssmClient.send(passCmd)]);
             ADMIN_CREDENTIALS.user = uR.Parameter.Value;
             ADMIN_CREDENTIALS.pass = pR.Parameter.Value;
-            
+
             const qD = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: "questions.json" }));
             const aD = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: "answers.json" }));
             contestQuestions = JSON.parse(await qD.Body.transformToString());
@@ -79,6 +91,74 @@ async function bootstrap() {
     }
 }
 bootstrap();
+
+
+// Pass config to frontend
+app.get('/api/config', (req, res) => {
+    res.json({ mode: CONTEST_MODE });
+});
+
+
+// NEW: Single Question Validation for FastTrack
+app.post('/api/check-task', (req, res) => {
+    const { teamName, qId, sqId, answer } = req.body;
+    const correctCfg = contestAnswers[qId];
+
+    if (!correctCfg) return res.status(404).json({ error: "Question not found" });
+
+    let isCorrect = false;
+    let pointsAwarded = 0;
+    let displayAnswer = "";
+
+    // Identify if we are checking a sub-question or a top-level question
+    const target = sqId ? correctCfg[sqId] : correctCfg;
+
+    if (target.type === 'mcq') {
+        isCorrect = (answer === target.ans);
+        displayAnswer = target.ans;
+        pointsAwarded = target.points || target.score;
+    } else if (target.keywords) {
+        isCorrect = target.keywords.some(kw =>
+            (answer || "").toLowerCase().includes(kw.toLowerCase())
+        );
+        displayAnswer = target.keywords[0]; // Show the first keyword as the hint
+        pointsAwarded = target.points || target.score;
+    }
+
+    // 🛡️ LOCKING LOGIC: Save to SQLite so they can't re-submit for points
+    const attemptId = sqId ? `${qId}_${sqId}` : qId;
+    
+    db.get("SELECT isCorrect FROM fasttrack_attempts WHERE teamName = ? AND questionId = ?",
+        [teamName, attemptId], (err, row) => {
+            if (row) {
+                return res.json({
+                    alreadySubmitted: true,
+                    correct: row.isCorrect === 1,
+                    msg: "Task already attempted."
+                });
+            }
+
+            db.run(
+                "INSERT INTO fasttrack_attempts (teamName, questionId, isCorrect, scoreAwarded) VALUES (?, ?, ?, ?)",
+                [teamName, attemptId, isCorrect ? 1 : 0, isCorrect ? pointsAwarded : 0],
+                (err) => {
+                    if (err) {
+                        console.error(err);
+                        return res.status(500).json({ error: "Storage error" });
+                    }
+                    res.json({
+                        correct: isCorrect,
+                        solution: isCorrect ? null : displayAnswer
+                    });
+
+                    if (isCorrect) {
+                        // Ensure this function is defined or wrapped in a try/catch
+                        try { updateLiveLeaderboard(); } catch (e) { }
+                    }
+                }
+            );
+        });
+});
 
 // --- CORE API ---
 app.get('/api/questions', (req, res) => res.json(contestQuestions));
@@ -118,7 +198,7 @@ app.post('/api/submit', (req, res) => {
                     score += sqCorrect.points;
                 }
             });
-        } 
+        }
         // Handle Standard MCQ/Text
         else {
             if (correctCfg.type === 'mcq' && userAns === correctCfg.ans) score += correctCfg.score;
@@ -197,5 +277,20 @@ io.on('connection', (socket) => {
     });
     socket.on('disconnect', () => activeTeams.delete(socket.id));
 });
+
+async function updateLiveLeaderboard() {
+    const query = `
+        SELECT teamName, SUM(scoreAwarded) as totalScore, MAX(id) as lastUpdate 
+        FROM fasttrack_attempts 
+        GROUP BY teamName 
+        ORDER BY totalScore DESC
+    `;
+
+    db.all(query, [], (err, rows) => {
+        if (err) return console.error("Leaderboard Error:", err);
+        // Broadcast to all connected clients
+        io.emit('leaderboard-update', rows);
+    });
+}
 
 server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server on port ${PORT}`));

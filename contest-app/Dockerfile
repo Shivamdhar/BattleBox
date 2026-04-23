@@ -26,6 +26,9 @@ WORKDIR /usr/src/app
 # Set environment to production
 ENV NODE_ENV=production
 
+# Add mode as batch
+ENV CONTEST_MODE=batch
+
 # Copy only the built node_modules and the source code from the builder
 COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY . .

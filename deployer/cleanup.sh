@@ -1,8 +1,23 @@
 #!/bin/bash
 
+
+# 0. Arguments
+MODE=$1  # Accept 'batch' or 'fast-track'
+if [[ "$MODE" != "batch" && "$MODE" != "fast-track" ]]; then
+    echo "❌ Usage: ./deployer.sh [batch|fast-track]"
+    exit 1
+fi
+
+
+# Mode-Specific Settings
+if [ "$MODE" == "batch" ]; then
+    BUCKET_NAME="my-contest-batch-2026"
+else
+    BUCKET_NAME="my-contest-fasttrack-2026"
+fi
+
 # 1. Configuration - MUST MATCH YOUR STACK
 STACK_NAME="ContestServerStack" # Change this to your actual stack name
-BUCKET_NAME="my-contest-data-2026"
 
 echo "⚠️  WARNING: This will permanently delete your S3 files and the AWS Stack."
 read -p "Are you sure you want to proceed? (y/n): " confirm
