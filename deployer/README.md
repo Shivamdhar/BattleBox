@@ -24,5 +24,5 @@ aws cloudformation create-stack \
 4. create deployer.sh file in the instance and copy the contents from deployer.sh in this repo
 5. change permissions for the file (chmod +x deployer.sh)
 6. Execute the deployer.sh (./deployer.sh [batch|fast-track])
-7. This script will clone the repo and deploy the UI (via docker) which would be accessible by your private ip endpoint with http://<your_ip>
+7. This script will clone the repo and deploy the UI (via docker) which would be accessible by your public ip endpoint with http://<your_ip>
 8. To clean up run ./cleanup.sh [batch|fast-track] from deployer folder on your local machine , which will delete the files in s3 followed by temrinating the stack !
